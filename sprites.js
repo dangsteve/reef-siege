@@ -66,7 +66,8 @@ const SpriteLib = (function () {
   }
 
   /* =================== TERRAIN =================== */
-  const THEMES = {
+  let FLAVOR = 'castle';
+  const REEF_THEMES = {
     meadow: { /* sunlit lagoon */
       ground: '#3f9a8c', patch: ['#4bae9c', '#358a7c', '#58b8a8', '#2f8f80'],
       speck: ['#7ac8b8', '#2a7568', '#9cd6c8'],
@@ -90,6 +91,32 @@ const SpriteLib = (function () {
       pathEdge: '#10181f', pathDirt: '#37424e',
       stone: '#4e5866', stoneTint: '#5c6874',
       portalGlow: '#3ae0d8', sky: '#22303c'
+    }
+  };
+  const THEMES = {
+    meadow: {
+      ground: '#5d9a44', patch: ['#6fae4e', '#4f8a3c', '#79b85a', '#548f3e'],
+      speck: ['#8cc86a', '#3f7530', '#a4d67e'],
+      tuft: '#3f7c2f', tuftHi: '#8ed468',
+      pathEdge: '#4a3a26', pathDirt: '#8a6a42',
+      stone: '#a8a094', stoneTint: '#b8ae9c',
+      portalGlow: '#46e0a0', sky: '#eaf6d8'
+    },
+    autumn: {
+      ground: '#a87f38', patch: ['#b98f40', '#96702f', '#c49a48', '#8a6a30'],
+      speck: ['#d4a850', '#7a5a26', '#e0b860'],
+      tuft: '#8a6226', tuftHi: '#e8c060',
+      pathEdge: '#4e3820', pathDirt: '#8a5f36',
+      stone: '#a89484', stoneTint: '#c0a082',
+      portalGlow: '#ff9636', sky: '#f6e8c8'
+    },
+    ashen: {
+      ground: '#4a4448', patch: ['#544e52', '#3c3639', '#5e565a', '#332e32'],
+      speck: ['#6a6266', '#28242a', '#7a7076'],
+      tuft: '#2e2a2e', tuftHi: '#8a8088',
+      pathEdge: '#241f24', pathDirt: '#565056',
+      stone: '#6e686e', stoneTint: '#7a7078',
+      portalGlow: '#ff5a3a', sky: '#5a5058'
     }
   };
 
@@ -446,11 +473,11 @@ const SpriteLib = (function () {
   function drawEmberPatch(g, R) {
     for (let i = 0; i < 7; i++) {
       const x = (R() - 0.5) * 36, y = (R() - 0.5) * 16;
-      glow(g, x, y, 6 + R() * 6, '#3ae0d8', 0.4);
-      g.fillStyle = rgba(90 + R() * 60, 220, 210, 0.9);
+      glow(g, x, y, 6 + R() * 6, FLAVOR === 'reef' ? '#3ae0d8' : '#ff6a2a', 0.4);
+      g.fillStyle = FLAVOR === 'reef' ? rgba(90 + R() * 60, 220, 210, 0.9) : rgba(255, 130 + R() * 80, 50, 0.9);
       g.beginPath(); g.arc(x, y, 1.4 + R() * 1.4, 0, Math.PI * 2); g.fill();
     }
-    g.strokeStyle = 'rgba(70,220,210,0.6)'; g.lineWidth = 1.4;
+    g.strokeStyle = FLAVOR === 'reef' ? 'rgba(70,220,210,0.6)' : 'rgba(255,120,50,0.7)'; g.lineWidth = 1.4;
     for (let i = 0; i < 3; i++) {
       const x = (R() - 0.5) * 30, y = (R() - 0.5) * 14;
       g.beginPath(); g.moveTo(x, y);
@@ -591,8 +618,10 @@ const SpriteLib = (function () {
   function drawCastle(g, T, theme, cx, cy, R) {
     g.save();
     g.translate(cx, cy);
-    const stone = '#e0bfae', stoneD = sh('#e0bfae', 0.72), stoneL = lt('#e0bfae', 0.3);
-    const roof = '#2f9a8e', roofD = sh('#2f9a8e', 0.7), roofL = lt('#2f9a8e', 0.3);
+    const stoneBase = FLAVOR === 'reef' ? '#e0bfae' : '#b0a8b8';
+    const stone = stoneBase, stoneD = sh(stoneBase, 0.72), stoneL = lt(stoneBase, 0.3);
+    const roofBase = FLAVOR === 'reef' ? '#2f9a8e' : '#3e63b0';
+    const roof = roofBase, roofD = sh(roofBase, 0.7), roofL = lt(roofBase, 0.3);
     const gold = '#e8c34a';
     shadowEllipse(g, 0, 62, 122, 20, 0.34);
 
@@ -704,7 +733,7 @@ const SpriteLib = (function () {
     const c = cv(1280, 720);
     const g = c.getContext('2d');
     const theme = map.theme || 'meadow';
-    const T = THEMES[theme] || THEMES.meadow;
+    const T = (FLAVOR==='reef'?REEF_THEMES:THEMES)[theme] || THEMES.meadow;
     const R = mulberry32(theme === 'meadow' ? 1001 : theme === 'autumn' ? 2002 : 3003);
     drawGround(g, T, theme, R);
     vignette(g);
@@ -717,10 +746,10 @@ const SpriteLib = (function () {
   }
 
   /* =================== TOWERS =================== */
-  const TOWER_IDS = ['archer', 'cannon', 'frost', 'flame', 'ballista', 'poison', 'storm', 'mint', 'beacon'];
+  const TOWER_IDS = ['archer', 'cannon', 'frost', 'flame', 'ballista', 'poison', 'storm', 'mint', 'beacon', 'arbalest'];
   const TOWER_HUE = {
     archer: '#c9a227', cannon: '#7a7f8a', frost: '#69c8e8', flame: '#e8712a',
-    ballista: '#a8743a', poison: '#7ec244', storm: '#b48ce8', mint: '#e8c93a', beacon: '#f0e6b4'
+    ballista: '#a8743a', poison: '#7ec244', storm: '#b48ce8', mint: '#e8c93a', beacon: '#f0e6b4', arbalest: '#7a94b8', wall: '#8d8798'
   };
   const WOOD = '#96683a', STONE = '#9a95a4', GOLD = '#e8c34a';
 
@@ -1362,9 +1391,16 @@ const SpriteLib = (function () {
   }
   const TOWER_PAINT = {
     archer: tArcher, cannon: tCannon, frost: tFrost, flame: tFlame,
-    ballista: tBallista, poison: tPoison, storm: tStorm, mint: tMint, beacon: tBeacon
+    ballista: tBallista, poison: tPoison, storm: tStorm, mint: tMint, beacon: tBeacon, arbalest: tBallista
   };
-  const TURRET_PAINT = { archer: turretArcher, cannon: turretCannon, ballista: turretBallista };
+  function turretArbalest(lvl) {
+    const t = turretBallista(Math.min(5, lvl + 1));
+    const s = 1.3;
+    const c2 = cv(Math.round(t.c.width * s), Math.round(t.c.height * s));
+    c2.getContext('2d').drawImage(t.c, 0, 0, c2.width, c2.height);
+    return { c: c2, px: t.px * s, py: t.py * s };
+  }
+  const TURRET_PAINT = { archer: turretArcher, cannon: turretCannon, ballista: turretBallista, arbalest: turretArbalest };
 
   function renderTower(id, lvl) {
     const c = cv(96, 122), g = c.getContext('2d');
@@ -1603,43 +1639,27 @@ const SpriteLib = (function () {
     }
   }
   ICON_PAINT.hero = {
-    aldric: function (g) { // Porous Pete: yellow sponge fry-cook with spatula
-      // shoulders (chef whites)
-      g.fillStyle = '#e8e2d4';
+    aldric: function (g) { // blue steel knight helm, red plume
+      bustBase(g, '#4a63b8', null);
+      // helm
+      g.fillStyle = '#9fb2cf';
       g.beginPath();
-      g.moveTo(6, 40); g.quadraticCurveTo(6, 28, 15, 26);
-      g.lineTo(29, 26); g.quadraticCurveTo(38, 28, 38, 40);
+      g.arc(22, 15, 10, Math.PI, 0);
+      g.lineTo(32, 24); g.lineTo(12, 24);
       g.closePath(); g.fill(); outl(g, 2.2);
-      // porous sponge head: rounded yellow square
-      g.fillStyle = '#f2d94e';
-      rr(g, 10, 1, 24, 24, 5); g.fill(); outl(g, 2.4);
-      g.fillStyle = 'rgba(20,14,26,0.10)';
-      rr(g, 26, 3, 6, 20, 3); g.fill();
-      // pores
-      g.fillStyle = 'rgba(180,150,30,0.75)';
-      for (const [px, py, pr] of [[13.5, 5.5, 1.6], [30, 8, 1.9], [12.5, 19, 2.0], [29.5, 20.5, 1.5], [21, 3.4, 1.2]]) {
-        g.beginPath(); g.ellipse(px, py, pr, pr * 0.8, 0.4, 0, Math.PI * 2); g.fill();
-      }
-      // big grin + eyes
-      g.fillStyle = '#fff';
-      g.beginPath(); g.arc(18, 11, 3.4, 0, Math.PI * 2); g.arc(26, 11, 3.4, 0, Math.PI * 2); g.fill();
-      g.strokeStyle = OUT; g.lineWidth = 1.6;
-      g.beginPath(); g.arc(18, 11, 3.4, 0, Math.PI * 2); g.stroke();
-      g.beginPath(); g.arc(26, 11, 3.4, 0, Math.PI * 2); g.stroke();
-      g.fillStyle = '#2a5a8a';
-      g.beginPath(); g.arc(18.8, 11.4, 1.5, 0, Math.PI * 2); g.arc(25.2, 11.4, 1.5, 0, Math.PI * 2); g.fill();
-      g.strokeStyle = OUT; g.lineWidth = 1.8;
-      g.beginPath(); g.arc(22, 15.5, 5.4, 0.25, Math.PI - 0.25); g.stroke();
-      // golden spatula over the shoulder
-      g.save(); g.translate(35, 30); g.rotate(-0.7);
-      g.strokeStyle = '#6b4a2a'; g.lineWidth = 2.6;
-      g.beginPath(); g.moveTo(0, 8); g.lineTo(0, -8); g.stroke();
-      g.fillStyle = '#e8c34a';
-      rr(g, -4.5, -17, 9, 10, 2); g.fill(); outl(g, 1.8);
-      g.strokeStyle = 'rgba(20,14,26,0.5)'; g.lineWidth = 1;
-      g.beginPath(); g.moveTo(-2, -16); g.lineTo(-2, -8.5); g.moveTo(1.6, -16); g.lineTo(1.6, -8.5); g.stroke();
-      g.restore();
-      shine(g, 14, 5.5, 3, 2, -0.4, 0.5);
+      g.fillStyle = 'rgba(20,14,26,0.28)';
+      g.beginPath(); g.moveTo(27, 6.6); g.arc(22, 15, 10, -0.55, 0); g.lineTo(32, 24); g.lineTo(27, 24); g.closePath(); g.fill();
+      // visor slit
+      g.fillStyle = '#181428';
+      rr(g, 14, 13.5, 16, 3.6, 1.8); g.fill();
+      g.fillStyle = '#9fb2cf'; rr(g, 21, 12.5, 2, 6, 1); g.fill();
+      // plume
+      g.fillStyle = '#d83a3a';
+      g.beginPath();
+      g.moveTo(18, 5); g.quadraticCurveTo(22, -4, 31, 1);
+      g.quadraticCurveTo(27, 3, 26, 6); g.closePath();
+      g.fill(); outl(g, 2);
+      shine(g, 17, 8, 3, 2, -0.4, 0.45);
     },
     lyra: function (g) { // green hooded ranger, braid
       bustBase(g, '#3f7a38', '#e8b890');
@@ -1764,6 +1784,138 @@ const SpriteLib = (function () {
       poly(g, [[16.6, 13.5], [19, 12.2], [21.4, 13.5], [19, 14.8]]); g.fill();
       poly(g, [[22.6, 13.5], [25, 12.2], [27.4, 13.5], [25, 14.8]]); g.fill();
     },
+    aurelia: function (g) { // legendary: radiant gold winged crown, white-gold armor
+      glow(g, 22, 14, 16, '#ffe9a0', 0.5);
+      bustBase(g, '#e8c452', '#f0c8a8');
+      // flowing white hair
+      g.fillStyle = '#f4f0e4';
+      g.beginPath();
+      g.moveTo(12, 22); g.quadraticCurveTo(10, 5, 22, 4);
+      g.quadraticCurveTo(34, 5, 32, 22);
+      g.quadraticCurveTo(31, 10, 22, 9);
+      g.quadraticCurveTo(13, 10, 12, 22);
+      g.closePath(); g.fill(); outl(g, 2.2);
+      // winged crown
+      for (const sd of [-1, 1]) {
+        g.beginPath();
+        g.moveTo(22 + sd * 9, 9);
+        g.quadraticCurveTo(22 + sd * 18, 6, 22 + sd * 17, -3);
+        g.quadraticCurveTo(22 + sd * 13, 3, 22 + sd * 8, 4.5);
+        g.closePath();
+        g.fillStyle = '#ffd75e'; g.fill(); outl(g, 2);
+        g.strokeStyle = 'rgba(255,255,255,0.55)'; g.lineWidth = 1.2;
+        g.beginPath(); g.moveTo(22 + sd * 10, 6.5); g.quadraticCurveTo(22 + sd * 15, 4, 22 + sd * 15, -1); g.stroke();
+      }
+      g.strokeStyle = GOLD; g.lineWidth = 2.2;
+      g.beginPath(); g.moveTo(13.6, 11.4); g.quadraticCurveTo(22, 7, 30.4, 11.4); g.stroke();
+      gem(g, 22, 9.2, 2.4, '#ffe9a0');
+      // serene eyes
+      g.fillStyle = 'rgba(20,14,26,0.85)';
+      g.beginPath(); g.arc(19, 15.5, 1.2, 0, Math.PI * 2); g.arc(25, 15.5, 1.2, 0, Math.PI * 2); g.fill();
+      shine(g, 17, 27, 3, 2, -0.5, 0.5);
+    },
+    karrgoth: function (g) { // legendary: dragon-skull helm, ember eyes, smoke
+      glow(g, 22, 15, 15, '#ff8a3a', 0.4);
+      bustBase(g, '#6a3428', null);
+      // dragon skull helm
+      g.fillStyle = '#d8ccb8';
+      g.beginPath();
+      g.moveTo(11, 22); g.quadraticCurveTo(8, 6, 22, 4);
+      g.quadraticCurveTo(36, 6, 33, 22);
+      g.lineTo(29, 17); g.lineTo(26, 22);
+      g.lineTo(22, 18); g.lineTo(18, 22);
+      g.lineTo(15, 17); g.closePath();
+      g.fill(); outl(g, 2.2);
+      g.fillStyle = 'rgba(20,14,26,0.2)';
+      g.beginPath(); g.moveTo(28, 7); g.quadraticCurveTo(34, 12, 33, 22); g.lineTo(29, 17); g.closePath(); g.fill();
+      // horns swept back
+      for (const sd of [-1, 1]) {
+        g.beginPath();
+        g.moveTo(22 + sd * 9, 8);
+        g.quadraticCurveTo(22 + sd * 19, 6, 22 + sd * 20, -2);
+        g.quadraticCurveTo(22 + sd * 14, 2, 22 + sd * 8, 4);
+        g.closePath();
+        g.fillStyle = '#b04a2a'; g.fill(); outl(g, 2);
+      }
+      // ember eyes in skull sockets
+      g.fillStyle = '#181428';
+      g.beginPath(); g.ellipse(18, 13.5, 3.2, 3.8, 0, 0, Math.PI * 2); g.ellipse(26, 13.5, 3.2, 3.8, 0, 0, Math.PI * 2); g.fill();
+      glow(g, 18, 13.5, 4, '#ff9a3a', 0.9); glow(g, 26, 13.5, 4, '#ff9a3a', 0.9);
+      g.fillStyle = '#ffd08a';
+      g.beginPath(); g.arc(18, 13.5, 1.6, 0, Math.PI * 2); g.arc(26, 13.5, 1.6, 0, Math.PI * 2); g.fill();
+      shine(g, 15, 7.5, 3, 1.6, -0.5, 0.4);
+    },
+    morrigan: function (g) { // legendary: raven-feather crown, pale queen, violet magic
+      glow(g, 22, 13, 15, '#9a5ae0', 0.45);
+      bustBase(g, '#2e2440', '#e8dce8');
+      // black feathered hair
+      g.fillStyle = '#221c30';
+      g.beginPath();
+      g.moveTo(11.5, 24); g.quadraticCurveTo(9, 5, 22, 4);
+      g.quadraticCurveTo(35, 5, 32.5, 24);
+      g.quadraticCurveTo(31, 10, 22, 9.5);
+      g.quadraticCurveTo(13, 10, 11.5, 24);
+      g.closePath(); g.fill(); outl(g, 2.2);
+      // raven-feather crown spikes
+      for (const [fx, fh] of [[14, 8], [18, 11], [22, 13], [26, 11], [30, 8]]) {
+        g.beginPath();
+        g.moveTo(fx - 2, 9); g.quadraticCurveTo(fx, 9 - fh, fx + 1.4, 9 - fh * 0.5);
+        g.quadraticCurveTo(fx + 2, 9 - fh * 0.2, fx + 2.4, 9);
+        g.closePath();
+        g.fillStyle = '#3a3050'; g.fill();
+        g.strokeStyle = OUT; g.lineWidth = 1.6; g.stroke();
+      }
+      g.strokeStyle = '#9a5ae0'; g.lineWidth = 1.8;
+      g.beginPath(); g.moveTo(13.6, 11.8); g.quadraticCurveTo(22, 8.2, 30.4, 11.8); g.stroke();
+      gem(g, 22, 10.2, 2.2, '#c88bff');
+      // violet eyes, dark lips
+      glow(g, 19, 15.5, 3.5, '#c060ff', 0.7); glow(g, 25, 15.5, 3.5, '#c060ff', 0.7);
+      g.fillStyle = '#e0b8ff';
+      g.beginPath(); g.arc(19, 15.5, 1.3, 0, Math.PI * 2); g.arc(25, 15.5, 1.3, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#6a3a5a';
+      rr(g, 20, 19.5, 4, 1.8, 0.9); g.fill();
+    }
+  };
+
+  ICON_PAINT.heroReef = {
+    aldric: function (g) { // Porous Pete: yellow sponge fry-cook with spatula
+      // shoulders (chef whites)
+      g.fillStyle = '#e8e2d4';
+      g.beginPath();
+      g.moveTo(6, 40); g.quadraticCurveTo(6, 28, 15, 26);
+      g.lineTo(29, 26); g.quadraticCurveTo(38, 28, 38, 40);
+      g.closePath(); g.fill(); outl(g, 2.2);
+      // porous sponge head: rounded yellow square
+      g.fillStyle = '#f2d94e';
+      rr(g, 10, 1, 24, 24, 5); g.fill(); outl(g, 2.4);
+      g.fillStyle = 'rgba(20,14,26,0.10)';
+      rr(g, 26, 3, 6, 20, 3); g.fill();
+      // pores
+      g.fillStyle = 'rgba(180,150,30,0.75)';
+      for (const [px, py, pr] of [[13.5, 5.5, 1.6], [30, 8, 1.9], [12.5, 19, 2.0], [29.5, 20.5, 1.5], [21, 3.4, 1.2]]) {
+        g.beginPath(); g.ellipse(px, py, pr, pr * 0.8, 0.4, 0, Math.PI * 2); g.fill();
+      }
+      // big grin + eyes
+      g.fillStyle = '#fff';
+      g.beginPath(); g.arc(18, 11, 3.4, 0, Math.PI * 2); g.arc(26, 11, 3.4, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = OUT; g.lineWidth = 1.6;
+      g.beginPath(); g.arc(18, 11, 3.4, 0, Math.PI * 2); g.stroke();
+      g.beginPath(); g.arc(26, 11, 3.4, 0, Math.PI * 2); g.stroke();
+      g.fillStyle = '#2a5a8a';
+      g.beginPath(); g.arc(18.8, 11.4, 1.5, 0, Math.PI * 2); g.arc(25.2, 11.4, 1.5, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = OUT; g.lineWidth = 1.8;
+      g.beginPath(); g.arc(22, 15.5, 5.4, 0.25, Math.PI - 0.25); g.stroke();
+      // golden spatula over the shoulder
+      g.save(); g.translate(35, 30); g.rotate(-0.7);
+      g.strokeStyle = '#6b4a2a'; g.lineWidth = 2.6;
+      g.beginPath(); g.moveTo(0, 8); g.lineTo(0, -8); g.stroke();
+      g.fillStyle = '#e8c34a';
+      rr(g, -4.5, -17, 9, 10, 2); g.fill(); outl(g, 1.8);
+      g.strokeStyle = 'rgba(20,14,26,0.5)'; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(-2, -16); g.lineTo(-2, -8.5); g.moveTo(1.6, -16); g.lineTo(1.6, -8.5); g.stroke();
+      g.restore();
+      shine(g, 14, 5.5, 3, 2, -0.4, 0.5);
+    },
     aurelia: function (g) { // King Neptune: sea-god, gold crown, white beard, trident
       glow(g, 22, 14, 16, '#7de8d8', 0.5);
       bustBase(g, '#2f9a8e', '#e8c8a8');
@@ -1862,7 +2014,51 @@ const SpriteLib = (function () {
       glow(g, 18.6, 12, 3.5, '#8affe8', 0.75); glow(g, 25.4, 12, 3.5, '#8affe8', 0.75);
       g.fillStyle = '#d8fff4';
       g.beginPath(); g.arc(18.6, 12, 1.4, 0, Math.PI * 2); g.arc(25.4, 12, 1.4, 0, Math.PI * 2); g.fill();
+    },
+  };
+  ICON_PAINT.hero.drake = function (g) { // sky drake hero: horned drake head
+    glow(g, 22, 15, 14, '#ff9a5e', 0.4);
+    bustBase(g, '#8a3a24', null);
+    g.fillStyle = '#d85f38';
+    g.beginPath(); g.ellipse(22, 14, 10.5, 9, 0, 0, Math.PI * 2); g.fill(); outl(g, 2.2);
+    g.fillStyle = sh('#d85f38', 0.8);
+    g.beginPath(); g.ellipse(26, 17.5, 6.5, 4.4, 0.2, 0, Math.PI * 2); g.fill();
+    for (const sd of [-1, 1]) {
+      g.beginPath();
+      g.moveTo(22 + sd * 7, 8);
+      g.quadraticCurveTo(22 + sd * 15, 4, 22 + sd * 15, -4);
+      g.quadraticCurveTo(22 + sd * 10, 1, 22 + sd * 5, 5);
+      g.closePath();
+      g.fillStyle = '#e8dcc8'; g.fill(); outl(g, 2);
     }
+    glow(g, 18.5, 13, 3.5, '#ffd75e', 0.85); glow(g, 25.5, 13, 3.5, '#ffd75e', 0.85);
+    g.fillStyle = '#ffe9a0';
+    g.beginPath(); g.arc(18.5, 13, 1.5, 0, Math.PI * 2); g.arc(25.5, 13, 1.5, 0, Math.PI * 2); g.fill();
+    g.fillStyle = 'rgba(255,150,60,0.75)';
+    g.beginPath(); g.arc(22, 21.5, 2.2, 0, Math.PI * 2); g.fill();
+  };
+  ICON_PAINT.hero.lich = function (g) { // necromancer: green-lit skull sage
+    glow(g, 22, 14, 15, '#9ae05e', 0.5);
+    bustBase(g, '#1c2418', null);
+    g.fillStyle = '#2a331f';
+    g.beginPath();
+    g.moveTo(10, 24);
+    g.quadraticCurveTo(8, 3, 22, 2);
+    g.quadraticCurveTo(36, 3, 34, 24);
+    g.quadraticCurveTo(31, 9, 22, 8);
+    g.quadraticCurveTo(13, 9, 10, 24);
+    g.closePath(); g.fill(); outl(g, 2.2);
+    g.fillStyle = '#d8e4c8';
+    g.beginPath(); g.arc(22, 15, 7.6, 0, Math.PI * 2); g.fill(); outl(g, 2);
+    g.fillStyle = '#141a10';
+    g.beginPath(); g.ellipse(19, 13.5, 2.4, 3, 0, 0, Math.PI * 2); g.ellipse(25, 13.5, 2.4, 3, 0, 0, Math.PI * 2); g.fill();
+    g.fillStyle = 'rgba(20,14,26,0.55)';
+    g.beginPath(); g.moveTo(20.6, 17.5); g.lineTo(23.4, 17.5); g.lineTo(22, 19.6); g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(20,26,16,0.6)'; g.lineWidth = 1.2;
+    for (const tx of [18.4, 20.8, 23.2, 25.6]) { g.beginPath(); g.moveTo(tx, 20.4); g.lineTo(tx, 22.4); g.stroke(); }
+    glow(g, 19, 13.5, 3.5, '#9ae05e', 0.9); glow(g, 25, 13.5, 3.5, '#9ae05e', 0.9);
+    g.fillStyle = '#d2ff9e';
+    g.beginPath(); g.arc(19, 13.5, 1.2, 0, Math.PI * 2); g.arc(25, 13.5, 1.2, 0, Math.PI * 2); g.fill();
   };
 
   ICON_PAINT.relic = {
@@ -2039,6 +2235,19 @@ const SpriteLib = (function () {
       g.fillStyle = '#ffffff'; g.beginPath(); g.arc(35.5, 8.5, 1.8, 0, Math.PI * 2); g.fill();
     }
   };
+  ICON_PAINT.wallIcon = function (g) {
+    g.fillStyle = '#9a95a4';
+    rr(g, 6, 14, 32, 20, 3); g.fill(); outl(g, 2.4);
+    g.fillStyle = '#b4afbe';
+    for (let i = 0; i < 4; i++) { rr(g, 6 + i * 8.6, 8, 6.4, 7, 1.5); g.fill(); outl(g, 1.8); }
+    g.strokeStyle = 'rgba(20,14,26,0.35)'; g.lineWidth = 1.4;
+    g.beginPath();
+    g.moveTo(6, 21); g.lineTo(38, 21); g.moveTo(6, 27.5); g.lineTo(38, 27.5);
+    g.moveTo(14, 14); g.lineTo(14, 21); g.moveTo(24, 14); g.lineTo(24, 21); g.moveTo(32, 14); g.lineTo(32, 21);
+    g.moveTo(10, 21); g.lineTo(10, 27.5); g.moveTo(20, 21); g.lineTo(20, 27.5); g.moveTo(29, 21); g.lineTo(29, 27.5);
+    g.stroke();
+    g.fillStyle = 'rgba(255,255,255,0.22)'; rr(g, 7.5, 15, 10, 2.4, 1.2); g.fill();
+  };
   ICON_PAINT.misc = {
     gold: function (g) { coin(g, 22, 22, 13); },
     fire: function (g) { // firestorm spell
@@ -2185,6 +2394,7 @@ const SpriteLib = (function () {
   function renderIcon(kind, id) {
     const c = cv(44, 44), g = c.getContext('2d');
     if (kind === 'tower') {
+      if (id === 'wall') { ICON_PAINT.wallIcon(g); return c; }
       const t = towerCache[id + ':2'] || renderTower(id, 2);
       // compose base + turret, crop the art region, fit into the 44 box
       const comp = cv(96, 122), cg = comp.getContext('2d');
@@ -2200,7 +2410,8 @@ const SpriteLib = (function () {
       const s = Math.min(42 / shh, 42 / sw);
       g.drawImage(comp, sx, sy, sw, shh, 22 - sw * s / 2, 43 - shh * s, sw * s, shh * s);
     } else {
-      const fn = ICON_PAINT[kind] && ICON_PAINT[kind][id];
+      let fn = ICON_PAINT[kind] && ICON_PAINT[kind][id];
+      if (kind === 'hero' && FLAVOR === 'reef' && ICON_PAINT.heroReef[id]) fn = ICON_PAINT.heroReef[id];
       if (fn) fn(g);
       else { // fallback: question tile
         g.fillStyle = '#5a5468'; rr(g, 8, 8, 28, 28, 8); g.fill(); outl(g, 2.4);
@@ -2226,6 +2437,7 @@ const SpriteLib = (function () {
     built = true;
   }
   function tower(id, lvl) {
+    if (!TOWER_PAINT[id]) return null; // walls draw live, not as sprites
     lvl = clamp(lvl | 0, 1, 5);
     const key = id + ':' + lvl;
     if (!towerCache[key]) towerCache[key] = renderTower(id, lvl);
@@ -2237,5 +2449,14 @@ const SpriteLib = (function () {
     return iconCache[key];
   }
 
-  return { build: build, terrain: terrain, tower: tower, icon: icon };
+  function setFlavor(f) {
+    if (f !== 'castle' && f !== 'reef') f = 'castle';
+    if (f === FLAVOR) return;
+    FLAVOR = f;
+    built = false;
+    for (const k in towerCache) delete towerCache[k];
+    for (const k in iconCache) delete iconCache[k];
+    build();
+  }
+  return { build: build, terrain: terrain, tower: tower, icon: icon, setFlavor: setFlavor, get flavor(){ return FLAVOR; } };
 })();

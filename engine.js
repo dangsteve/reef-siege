@@ -13,7 +13,8 @@ function newGame(mapId){
     mapId:mdef.id,
     gold:mdef.mods.startGold||CFG.START_GOLD, lives:CFG.START_LIVES, wave:1, time:0,
     over:false, paused:false, speed:1, autoWave:true,
-    towers:[], enemies:[], troops:[], projs:[], parts:[], texts:[], fx:[],
+    towers:[], walls:[], enemies:[], troops:[], projs:[], parts:[], texts:[], fx:[],
+    undo:[], chest:null,
     troopLvl:{}, desired:{},
     heroes:[], selHero:null,
     relics:{},
@@ -55,7 +56,7 @@ function recruitHero(h){
   if(G.gold<h.hdef.cost)return false;
   G.gold-=h.hdef.cost;
   h.recruited=true;
-  const st=heroStat(h.hdef,h.lvl);
+  const st=heroStat(h.hdef,h.lvl,h.asc);
   h.hp=st.hp;h.maxHp=st.hp;h.dead=false;
   const spot=posAt(0,MAP.P[0].total*0.55);
   h.x=spot.x+rnd(-40,40);h.y=spot.y-52;h.homeX=h.x;h.homeY=h.y;
@@ -69,7 +70,18 @@ function upgradeHeroU(h){
   const c=heroUpCost(h.hdef,h.lvl);
   if(G.gold<c)return false;
   G.gold-=c;h.lvl++;
-  const st=heroStat(h.hdef,h.lvl);
+  pushUndo({t:'hero',id:h.id,to:h.lvl,cost:c});
+  /* ✨ ASCENSION: rare chance for a mortal hero to reach legendary power */
+  if(!h.hdef.legendary&&!h.asc&&Math.random()<ASC_CHANCE){
+    h.asc=true;
+    G.undo.length=0; // ascension is fate — not undoable
+    setBanner('✨✨ '+h.hdef.name+' has ASCENDED to legendary power! ✨✨',true);
+    addFx({kind:'ring',x:h.x,y:h.y,r:10,maxR:160,life:0.9,col:'#ffd75e'});
+    burst(h.x,h.y,40,'#ffe27a');
+    G.shake=10;
+    SFXp('horn_victory');
+  }
+  const st=heroStat(h.hdef,h.lvl,h.asc);
   if(!h.dead){
     const pct=h.hp/h.maxHp;
     h.maxHp=st.hp;h.hp=st.hp*Math.max(pct,0.6);
@@ -86,26 +98,109 @@ function moveHeroTo(h,x,y){
   addFx({kind:'flag',x,y,life:1,col:h.hdef.col});
 }
 
+/* ================= UNDO ================= */
+function pushUndo(a){G.undo.push(a);if(G.undo.length>12)G.undo.shift();}
+function undoLast(){
+  const a=G.undo.pop();
+  if(!a)return false;
+  if(a.t==='place'){
+    const t=G.towers.find(x=>x===a.tower);
+    if(t&&t.lvl===1&&!(t.kills>0)){G.towers=G.towers.filter(x=>x!==t);G.gold+=a.cost;}
+    else return undoLast();
+  }else if(a.t==='up'){
+    const t=G.towers.find(x=>x===a.tower);
+    if(t&&t.lvl===a.to){t.lvl--;G.gold+=a.cost;}
+    else return undoLast();
+  }else if(a.t==='troop'){
+    if(G.troopLvl[a.id]===a.to){G.troopLvl[a.id]--;G.gold+=a.cost;}
+    else return undoLast();
+  }else if(a.t==='hero'){
+    const h=G.heroes.find(x=>x.id===a.id);
+    if(h&&h.lvl===a.to){h.lvl--;const st=heroStat(h.hdef,h.lvl,h.asc);h.maxHp=st.hp;h.hp=Math.min(h.hp,st.hp);G.gold+=a.cost;}
+    else return undoLast();
+  }else if(a.t==='relic'){
+    if(G.relics[a.id]===a.to){G.relics[a.id]--;G.gold+=a.cost;if(a.id==='walls')G.lives=Math.min(G.lives,maxLives());}
+    else return undoLast();
+  }else if(a.t==='wallplace'){
+    const w=G.walls.find(x=>x===a.wall);
+    if(w&&w.lvl===1){G.walls=G.walls.filter(x=>x!==w);G.gold+=a.cost;}
+    else return undoLast();
+  }else if(a.t==='wallup'){
+    const w=G.walls.find(x=>x===a.wall);
+    if(w&&w.lvl===a.to){w.lvl--;w.maxHp=wallHpAt(a.wave,w.lvl);w.hp=Math.min(w.hp,w.maxHp);G.gold+=a.cost;}
+    else return undoLast();
+  }
+  SFXp('sell');
+  return true;
+}
+
 /* ================= TOWERS ================= */
 function canPlace(c,r){
   if(c<0||r<0||c>=CFG.COLS||r>=CFG.ROWS)return false;
   if(MAP.blocked.has(c+','+r))return false;
   return !G.towers.some(t=>t.c===c&&t.r===r);
 }
+function canPlaceWall(x,y){
+  if(distToPaths(x,y)>26)return false;
+  const np=nearestPathPoint(x,y);
+  if(np.d>MAP.P[np.pi].total-160||np.d<60)return false; // not at the gate or spawn
+  return !G.walls.some(w=>w.pi===np.pi&&Math.abs(w.d-np.d)<44);
+}
 function placeTower(id,c,r){
   const def=TOWER_BY[id];
-  if(!def||G.gold<def.cost||!canPlace(c,r))return false;
+  if(!def||G.gold<def.cost)return false;
+  if(def.wall){
+    const x=c*CFG.CELL+20,y=r*CFG.CELL+20;
+    if(!canPlaceWall(x,y))return false;
+    G.gold-=def.cost;
+    const np=nearestPathPoint(x,y);
+    const p=posAt(np.pi,np.d);
+    const hp=wallHpAt(G.wave,1);
+    const w={isWall:true,pi:np.pi,d:np.d,x:p.x,y:p.y,ang:p.a,lvl:1,hp,maxHp:hp,flash:0};
+    G.walls.push(w);
+    pushUndo({t:'wallplace',wall:w,cost:def.cost});
+    burst(p.x,p.y,12,'#b8b2c0');
+    SFXp('build');
+    return true;
+  }
+  if(!canPlace(c,r))return false;
   G.gold-=def.cost;
-  G.towers.push({id,c,r,x:c*CFG.CELL+20,y:r*CFG.CELL+20,lvl:1,cd:0,ang:-Math.PI/2,auraMul:1,heat:0,tick:0,kills:0});
+  const t={id,c,r,x:c*CFG.CELL+20,y:r*CFG.CELL+20,lvl:1,cd:0,ang:-Math.PI/2,auraMul:1,heat:0,tick:0,kills:0};
+  G.towers.push(t);
+  pushUndo({t:'place',tower:t,cost:def.cost});
   burst(c*CFG.CELL+20,r*CFG.CELL+20,10,'#d8c9a0');
   SFXp('build');
   return true;
+}
+function upgradeWall(w){
+  const c=wallUpCost(w.lvl);
+  if(G.gold<c)return false;
+  G.gold-=c;w.lvl++;
+  w.maxHp=wallHpAt(G.wave,w.lvl);w.hp=w.maxHp;
+  pushUndo({t:'wallup',wall:w,to:w.lvl,cost:c,wave:G.wave});
+  burst(w.x,w.y,12,'#ffd75e');
+  SFXp('upgrade');
+  return true;
+}
+function repairWall(w){
+  const c=Math.round(TOWER_BY.wall.cost*0.4*(1-w.hp/w.maxHp)*Math.pow(1.4,w.lvl-1))+10;
+  if(G.gold<c||w.hp>=w.maxHp)return false;
+  G.gold-=c;w.hp=w.maxHp;
+  burst(w.x,w.y,8,'#7ee08a');
+  SFXp('build');
+  return true;
+}
+function sellWall(w){
+  G.gold+=Math.round(TOWER_BY.wall.cost*0.5);
+  G.walls=G.walls.filter(x=>x!==w);
+  SFXp('sell');
 }
 function upgradeTower(t){
   if(t.lvl>=CFG.MAX_TOWER_LVL)return false;
   const c=towerUpCost(TOWER_BY[t.id],t.lvl);
   if(G.gold<c)return false;
   G.gold-=c;t.lvl++;
+  pushUndo({t:'up',tower:t,to:t.lvl,cost:c});
   burst(t.x,t.y,16,'#ffd75e');
   addFx({kind:'ring',x:t.x,y:t.y,r:6,maxR:44,life:0.4,col:'#ffd75e'});
   SFXp('upgrade');
@@ -122,6 +217,7 @@ function sellTower(t){
 
 /* ================= TROOPS ================= */
 function troopsAlive(id){return G.troops.filter(t=>t.id===id).length;}
+function popCount(){return G.troops.filter(t=>!TROOP_BY[t.id].summon).length;}
 function pickTroopPath(){
   let best=0,bs=-1e9;
   for(let pi=0;pi<MAP.P.length;pi++){
@@ -135,7 +231,7 @@ function pickTroopPath(){
 function summonTroop(id,silent,discount){
   const def=TROOP_BY[id];
   if(def.unlock>G.wave)return false;
-  if(G.troops.length>=popCap(G.wave))return false;
+  if(popCount()>=popCap(G.wave))return false;
   const st=troopStat(id,G.troopLvl[id]);
   const cost=discount?Math.round(st.cost*0.6):st.cost; // auto-reinforcements are cheaper
   if(G.gold<cost)return false;
@@ -155,6 +251,7 @@ function upgradeTroopType(id){
   const c=troopUpCost(id,G.troopLvl[id]);
   if(G.gold<c)return false;
   G.gold-=c;G.troopLvl[id]++;
+  pushUndo({t:'troop',id,to:G.troopLvl[id],cost:c});
   SFXp('upgrade');
   return true;
 }
@@ -170,6 +267,46 @@ function maintainArmy(dt){
   }
 }
 
+/* ================= BULK UPGRADES ================= */
+function upgradeTowerMax(t){let n=0;while(t.lvl<CFG.MAX_TOWER_LVL&&upgradeTower(t))n++;return n;}
+function bulkUpgrade(kind){
+  let spent=0,guard=0;
+  while(guard++<400){
+    let best=null,bc=Infinity,act=null;
+    if(kind==='towers'){
+      for(const t of G.towers){
+        if(t.lvl>=CFG.MAX_TOWER_LVL)continue;
+        const c=towerUpCost(TOWER_BY[t.id],t.lvl);
+        if(c<bc){bc=c;best=t;act='tower';}
+      }
+      for(const w of G.walls){
+        const c=wallUpCost(w.lvl);
+        if(c<bc){bc=c;best=w;act='wall';}
+      }
+    }else if(kind==='troops'){
+      for(const d of TROOPS){
+        if(d.summon||d.unlock>G.wave||G.troopLvl[d.id]>=CFG.MAX_TROOP_LVL)continue;
+        const c=troopUpCost(d.id,G.troopLvl[d.id]);
+        if(c<bc){bc=c;best=d.id;act='troop';}
+      }
+    }else if(kind==='heroes'){
+      for(const h of G.heroes){
+        if(!h.recruited)continue;
+        const c=heroUpCost(h.hdef,h.lvl);
+        if(c<bc){bc=c;best=h;act='hero';}
+      }
+    }
+    if(!best||G.gold<bc)break;
+    if(act==='tower')upgradeTower(best);
+    else if(act==='wall')upgradeWall(best);
+    else if(act==='troop')upgradeTroopType(best);
+    else if(act==='hero')upgradeHeroU(best);
+    spent+=bc;
+  }
+  if(spent>0){setBanner('⏫ Bulk upgrade: spent '+fmt(spent)+'g');SFXp('upgrade');}
+  return spent;
+}
+
 /* ================= RELICS & CONSUMABLES ================= */
 function buyRelic(id){
   const def=RELIC_BY[id],tier=G.relics[id];
@@ -177,6 +314,7 @@ function buyRelic(id){
   const c=relicCost(def,tier);
   if(G.gold<c)return false;
   G.gold-=c;G.relics[id]++;
+  pushUndo({t:'relic',id,to:G.relics[id],cost:c});
   if(id==='walls')G.lives=Math.min(maxLives(),G.lives+def.per);
   setBanner('✦ '+def.name+' — tier '+G.relics[id]+' ✦');
   SFXp('relic_buy');
@@ -201,7 +339,7 @@ function castSpell(id){
   for(const tdef of TROOPS){
     if(tdef.unlock>G.wave)continue;
     let guard=0;
-    while(troopsAlive(tdef.id)<G.desired[tdef.id]&&G.troops.length<popCap(G.wave)&&guard++<30){
+    while(troopsAlive(tdef.id)<G.desired[tdef.id]&&popCount()<popCap(G.wave)&&guard++<30){
       const st=troopStat(tdef.id,G.troopLvl[tdef.id]);
       const pi=pickTroopPath();
       const d=MAP.P[pi].total-40;
@@ -212,7 +350,7 @@ function castSpell(id){
     }
   }
   G.ragnarokT=15;
-  setBanner('🌀 M A E L S T R O M 🌀',true);
+  setBanner(THEME.txt.ragnarok,true);
   SFXp(def.snd);
   return true;
 }
@@ -265,7 +403,7 @@ function eventReward(e){
     if(roll<0.5){
       const g=Math.round((130+26*G.wave)*(1+relicVal('treasury')));
       G.gold+=g;G.goldEarned+=g;
-      setBanner('✨ The Golden Sea Turtle bursts into '+g+' gold! ✨');
+      setBanner(THEME.txt.boarGold(g));
       for(let i=0;i<3;i++)addFx({kind:'coinfly',x:e.x+rnd(-12,12),y:e.y+rnd(-12,12),life:0.7,t:0});
       SFXp('chest');
     }else if(roll<0.75){
@@ -309,6 +447,28 @@ function eventReward(e){
   }
 }
 
+function collectChest(x,y){
+  if(!G.chest||dist2(x,y,G.chest.x,G.chest.y)>34*34)return false;
+  const c=G.chest;G.chest=null;
+  const roll=Math.random();
+  if(roll<0.6){
+    const g=Math.round((90+22*G.wave)*(1+relicVal('treasury')));
+    G.gold+=g;G.goldEarned+=g;
+    addText(c.x,c.y-16,'+'+g+'g!','#ffd75e',1.4);
+    for(let i=0;i<3;i++)addFx({kind:'coinfly',x:c.x+rnd(-10,10),y:c.y+rnd(-10,10),life:0.7,t:0});
+  }else if(roll<0.85){
+    for(const s of SPELLS)G.spells[s.id]=Math.min(G.spells[s.id],1);
+    addText(c.x,c.y-16,'Spells recharged!','#8ad0ff',1.4);
+  }else{
+    for(const t of G.troops)t.hp=t.maxHp;
+    for(const h of activeHeroes())h.hp=h.maxHp;
+    addText(c.x,c.y-16,'Army restored!','#7ee08a',1.4);
+  }
+  burst(c.x,c.y,16,'#ffd75e');
+  SFXp('chest');
+  return true;
+}
+
 /* ================= PEAK BUILD (vault restart) ================= */
 function startPeakRun(mapId){
   const pk=vaultPeak(mapId);
@@ -323,8 +483,8 @@ function startPeakRun(mapId){
     const h=G.heroes.find(x=>x.id===hs.id);
     if(!h)continue;
     if(h.hdef.legendary&&!vaultHas(h.id))continue;
-    h.recruited=true;h.lvl=hs.lvl||1;
-    const st=heroStat(h.hdef,h.lvl);
+    h.recruited=true;h.lvl=hs.lvl||1;h.asc=!!hs.asc;
+    const st=heroStat(h.hdef,h.lvl,h.asc);
     h.hp=st.hp;h.maxHp=st.hp;
   }
   setBanner('⭐ Peak build restored — Wave '+pk.wave+' strength, from wave 1! ⭐',true);
@@ -393,6 +553,18 @@ function startWave(bonus){
   if(bonus>0){G.gold+=bonus;addText(CFG.W/2,90,'+'+bonus+'g early bonus!','#ffd75e');}
   G.waveActive=true;
   G.waveStartLives=G.lives;
+  if(!G.chest&&Math.random()<0.14){
+    let tries=0;
+    while(tries++<40){
+      const c=Math.floor(rnd(1,CFG.COLS-1)),r=Math.floor(rnd(1,CFG.ROWS-1));
+      if(!MAP.blocked.has(c+','+r)&&!G.towers.some(t=>t.c===c&&t.r===r)){
+        G.chest={x:c*CFG.CELL+20,y:r*CFG.CELL+20,t:12,max:12};
+        setBanner(THEME.txt.chest);
+        SFXp('chest');
+        break;
+      }
+    }
+  }
   G.spawnQueue=buildWaveSchedule(G.wave);
   injectEvents();
   G.spawnT=1.0;
@@ -440,7 +612,7 @@ function endWave(){
       v.peaks[G.mapId]={
         wave:cleared,
         budget:Math.max(MAP.def.mods.startGold||CFG.START_GOLD,Math.round(invested*0.6+G.gold*0.4)),
-        heroes:G.heroes.filter(h=>h.recruited).map(h=>({id:h.id,lvl:h.lvl})),
+        heroes:G.heroes.filter(h=>h.recruited).map(h=>({id:h.id,lvl:h.lvl,asc:!!h.asc})),
         troopLvl:Object.assign({},G.troopLvl),
         relics:Object.assign({},G.relics),
         desired:Object.assign({},G.desired),
@@ -474,8 +646,8 @@ function spawnEnemy(entry){
     captive:entry.captive||null,
   });
   if(boss)G.shake=Math.max(G.shake,8);
-  if(def.event==='boar'){setBanner('✨ A Golden Sea Turtle glides for the gate — catch it for treasure! ✨');SFXp('chest');}
-  if(def.event==='warden'){setBanner('🔮 A Locker Warden drags '+HERO_BY[entry.captive].name+' in chains — SLAY IT! 🔮',true);SFXp('boss_roar');}
+  if(def.event==='boar'){setBanner(THEME.txt.boarSpawn);SFXp('chest');}
+  if(def.event==='warden'){setBanner(THEME.txt.wardenSpawn(HERO_BY[entry.captive].name),true);SFXp('boss_roar');}
 }
 
 /* ================= DAMAGE ================= */
@@ -503,6 +675,14 @@ function killEnemy(e){
   addFx({kind:'die',x:e.x,y:e.y,life:0.5,col:e.def.col,size:e.size});
   addFx({kind:'coinfly',x:e.x,y:e.y,life:0.7,t:0});
   if(e.def.event){eventReward(e);}
+  /* the Lich harvests souls */
+  if(!e.boss&&!e.def.event){
+    const lich=G.heroes.find(h=>h.id==='lich'&&h.recruited&&!h.dead);
+    if(lich&&dist2(lich.x,lich.y,e.x,e.y)<260*260){
+      const ch=lich.lvl>=(lich.hdef.passive?lich.hdef.passive.lvl:99)?0.14:0.09;
+      if(Math.random()<ch)spawnSkeletonAt(e.pi,e.d);
+    }
+  }
   if(e.boss){
     G.bossKills++;G.shake=14;
     addFx({kind:'ring',x:e.x,y:e.y,r:10,maxR:130,life:0.7,col:'#ffd75e'});
@@ -517,8 +697,8 @@ function leakEnemy(e){
   e.dead=true;
   if(e.def.event){
     setBanner(e.def.event==='warden'
-      ?('The Locker Warden escaped with '+(e.captive&&HERO_BY[e.captive]?HERO_BY[e.captive].name:'its captive')+'…')
-      :'The Golden Sea Turtle got away…');
+      ?THEME.txt.wardenEscape(e.captive&&HERO_BY[e.captive]?HERO_BY[e.captive].name:'its captive')
+      :THEME.txt.boarEscape);
     return;
   }
   G.lives-=e.leak;
@@ -529,7 +709,7 @@ function leakEnemy(e){
   if(G.lives<=0){
     G.lives=0;G.over=true;
     try{
-      const k='cs2_best_'+G.mapId;
+      const k='rs2_best_'+G.mapId;
       const b=+localStorage.getItem(k)||0;
       if(G.wave>b)localStorage.setItem(k,G.wave);
     }catch(err){}
@@ -539,6 +719,15 @@ function leakEnemy(e){
   }
 }
 function damageAlly(t,dmg){
+  if(t.isWall){
+    t.hp-=dmg;t.flash=0.1;
+    if(t.hp<=0){
+      burst(t.x,t.y,16,'#8d8798');
+      addFx({kind:'ring',x:t.x,y:t.y,r:8,maxR:40,life:0.4,col:'#b8b2c0'});
+      SFXp('boom');
+    }
+    return;
+  }
   if(t.isHero){
     if(t.hdef.passive&&t.lvl>=t.hdef.passive.lvl){
       if(t.hdef.id==='bjorn')dmg*=0.7;
@@ -566,6 +755,18 @@ function damageAlly(t,dmg){
   }
 }
 
+function spawnSkeletonAt(pi,d){
+  const w=G.wave;
+  const hp=Math.round(90*Math.sqrt(hpMul(w))*2.2);
+  const dmg=8*Math.sqrt(hpMul(w));
+  const p=posAt(pi,d);
+  G.troops.push({id:'skeleton',lvl:0,pi,d,lane:rnd(-15,15),x:p.x,y:p.y,
+    hp,maxHp:hp,skelDmg:dmg,atkCd:rnd(0,0.4),foe:null,state:'walk',anim:rnd(0,6),face:-1,
+    healCd:0,swing:0,flash:0,decay:26});
+  burst(p.x,p.y,10,'#9ae05e');
+  addFx({kind:'ring',x:p.x,y:p.y,r:4,maxR:26,life:0.35,col:'#9ae05e'});
+}
+
 /* ================= FX helpers ================= */
 function burst(x,y,n,col){
   if(LOW_FX)n=Math.ceil(n/2);
@@ -587,7 +788,12 @@ function towerFire(t,st,def){
   const inRange=G.enemies.filter(e=>!e.dead&&!(e.def.fly&&def.targets!=='both')&&dist2(t.x,t.y,e.x,e.y)<st.range*st.range);
   if(!inRange.length)return false;
   let tgt;
-  if(def.id==='ballista')tgt=inRange.reduce((a,b)=>a.hp>b.hp?a:b);
+  if(def.id==='arbalest'){
+    const fly=inRange.filter(e=>e.def.fly);
+    const pool=fly.length?fly:inRange;
+    tgt=pool.reduce((a,b)=>a.hp>b.hp?a:b);
+  }
+  else if(def.id==='ballista')tgt=inRange.reduce((a,b)=>a.hp>b.hp?a:b);
   else tgt=inRange.reduce((a,b)=>(MAP.P[a.pi].total-a.d)<(MAP.P[b.pi].total-b.d)?a:b); // closest to the gate
 
   t.ang=Math.atan2(tgt.y-t.y,tgt.x-t.x);
@@ -614,6 +820,7 @@ function towerFire(t,st,def){
       const tt=Math.hypot(tgt.x-t.x,tgt.y-t.y)/240;
       G.projs.push({kind:'glob',x0:t.x,y0:t.y-24,x1:tgt.x,y1:tgt.y,x:t.x,y:t.y-24,t:0,dur:tt,dmg,dtype:'magic',splash:st.splash,poison:st.poison,poisonDur:st.poisonDur,srcT:t});
       SFXp('poison');break;}
+    case 'arbalest':
     case 'ballista':{
       const a=t.ang;
       G.projs.push({kind:'bolt',x:t.x+Math.cos(a)*16,y:t.y-24+Math.sin(a)*16,vx:Math.cos(a)*540,vy:Math.sin(a)*540,
@@ -720,6 +927,32 @@ function castHeroSkill(h){
       h.hp=Math.min(h.maxHp,h.hp+h.maxHp*0.2);
       addFx({kind:'ring',x:h.x,y:h.y,r:14,maxR:150,life:0.5,col:def.col});
       G.shake=Math.max(G.shake,6);
+      break;}
+    case 'skysweep':{
+      const flyers=G.enemies.filter(e=>!e.dead&&e.def.fly);
+      if(flyers.length<2)return false;
+      for(const e of flyers){
+        damageEnemy(e,st.dmg*4,'magic');
+        addFx({kind:'slash',x:e.x,y:e.y-14,life:0.25,col:def.col});
+        if(!e.dead)burst(e.x,e.y,5,def.col);
+      }
+      const tgt2=densestCluster(h.x,h.y,320);
+      if(tgt2){
+        addFx({kind:'firestorm',x:tgt2.x,y:tgt2.y,r:80,life:0.7,t:0});
+        for(const e of G.enemies){
+          if(e.dead||e.def.fly)continue;
+          if(dist2(e.x,e.y,tgt2.x,tgt2.y)<80*80)damageEnemy(e,st.dmg*1.5,'magic');
+        }
+      }
+      G.shake=Math.max(G.shake,5);
+      break;}
+    case 'massraise':{
+      let n=0;
+      for(const e of G.enemies)if(!e.dead&&dist2(h.x,h.y,e.x,e.y)<300*300)n++;
+      if(n<2)return false;
+      const np=nearestPathPoint(h.x,h.y);
+      for(let i=0;i<5;i++)spawnSkeletonAt(np.pi,clamp(np.d+rnd(-60,60),20,MAP.P[np.pi].total-30));
+      G.shake=Math.max(G.shake,4);
       break;}
     case 'shadowflurry':{
       const cand=G.enemies.filter(e=>!e.dead&&dist2(h.x,h.y,e.x,e.y)<220*220)
@@ -832,6 +1065,12 @@ function subStep(dt){
   }
 
   maintainArmy(dt);
+  for(const w of G.walls)if(w.flash>0)w.flash-=dt;
+  G.walls=G.walls.filter(w=>w.hp>0);
+  if(G.chest){
+    G.chest.t-=dt;
+    if(G.chest.t<=0)G.chest=null;
+  }
 
   /* aura */
   G.auraT-=dt;
@@ -1019,6 +1258,13 @@ function subStep(dt){
       const gone=b.isHero?b.dead:(b.deadFlag||b.hp<=0);
       if(gone||dist2(e.x,e.y,b.x,b.y)>55*55)e.blk=null;
     }
+    if(!e.blk&&!e.def.fly){
+      for(const w of G.walls){
+        if(w.pi!==e.pi)continue;
+        const gap=w.d-e.d;
+        if(gap>-6&&gap<30){e.blk=w;break;}
+      }
+    }
     if(e.blk){
       e.atkCd-=dt;
       if(e.atkCd<=0){
@@ -1041,6 +1287,11 @@ function subStep(dt){
   const banner=G.heroes.find(h=>h.id==='aldric'&&h.recruited&&!h.dead&&h.lvl>=(h.hdef.passive?h.hdef.passive.lvl:99));
   for(const tr of G.troops){
     const def=TROOP_BY[tr.id],st=troopStat(tr.id,tr.lvl);
+    if(tr.skelDmg)st.dmg=tr.skelDmg;
+    if(tr.decay!==undefined){
+      tr.decay-=dt;
+      if(tr.decay<=0){tr.deadFlag=true;burst(tr.x,tr.y,6,'#9ae05e');continue;}
+    }
     tr.anim+=dt*2.2;
     if(tr.flash>0)tr.flash-=dt;
     if(tr.swing>0)tr.swing-=dt;
@@ -1138,7 +1389,7 @@ function subStep(dt){
     if(h.dead){
       h.respawnT-=dt;
       if(h.respawnT<=0){
-        const st=heroStat(def,h.lvl);
+        const st=heroStat(def,h.lvl,h.asc);
         h.dead=false;h.hp=st.hp;h.maxHp=st.hp;
         h.x=h.homeX;h.y=h.homeY;
         burst(h.x,h.y,16,def.col);
@@ -1146,7 +1397,7 @@ function subStep(dt){
       }
       continue;
     }
-    const st=heroStat(def,h.lvl);
+    const st=heroStat(def,h.lvl,h.asc);
     h.maxHp=st.hp;
     h.anim+=dt*2.2;
     if(h.flash>0)h.flash-=dt;
@@ -1184,6 +1435,7 @@ function subStep(dt){
           h.atkCd=def.rate;h.swing=0.2;
           let dmg=st.dmg*(G.ragnarokT>0?1.5:1);
           const hasPassive=def.passive&&h.lvl>=def.passive.lvl;
+          if(def.airBonus&&foe.def.fly)dmg*=hasPassive?2:1.5;
           if(def.id==='lyra'&&hasPassive&&Math.random()<0.15){dmg*=2;addText(h.x,h.y-24,'CRIT','#ffd75e',0.7);}
           if(def.melee){
             damageEnemy(foe,dmg,'phys');
@@ -1225,26 +1477,27 @@ function subStep(dt){
 }
 
 /* ================= SAVE / LOAD ================= */
-function saveKey(){return 'cs2_save_'+G.mapId;}
+function saveKey(){return 'rs2_save_'+G.mapId;}
 function saveGame(){
   try{
     const s={v:3,mapId:G.mapId,gold:G.gold,lives:G.lives,wave:G.wave,
       towers:G.towers.map(t=>({id:t.id,c:t.c,r:t.r,lvl:t.lvl,k:t.kills||0})),
+      walls:G.walls.map(w=>({pi:w.pi,d:Math.round(w.d),lvl:w.lvl})),
       streak:G.streak,
       troopLvl:G.troopLvl,desired:G.desired,rally:G.rally,
-      heroes:G.heroes.map(h=>({id:h.id,lvl:h.lvl,recruited:h.recruited})),
+      heroes:G.heroes.map(h=>({id:h.id,lvl:h.lvl,recruited:h.recruited,asc:!!h.asc})),
       relics:G.relics,spun:G.spun,
       kills:G.kills,bossKills:G.bossKills,goldEarned:G.goldEarned,
       autoWave:G.autoWave,speed:G.speed};
     localStorage.setItem(saveKey(),JSON.stringify(s));
   }catch(err){}
 }
-function hasSave(mapId){try{return !!localStorage.getItem('cs2_save_'+mapId);}catch(err){return false;}}
-function bestWave(mapId){try{return +localStorage.getItem('cs2_best_'+mapId)||0;}catch(err){return 0;}}
+function hasSave(mapId){try{return !!localStorage.getItem('rs2_save_'+mapId);}catch(err){return false;}}
+function bestWave(mapId){try{return +localStorage.getItem('rs2_best_'+mapId)||0;}catch(err){return 0;}}
 function clearSave(){try{localStorage.removeItem(saveKey());}catch(err){}}
 function loadGame(mapId){
   try{
-    const s=JSON.parse(localStorage.getItem('cs2_save_'+mapId));
+    const s=JSON.parse(localStorage.getItem('rs2_save_'+mapId));
     if(!s||(s.v!==2&&s.v!==3)||!(s.lives>0))return false;
     newGame(mapId);
     G.gold=s.gold;G.lives=s.lives;G.wave=s.wave;
@@ -1267,13 +1520,19 @@ function loadGame(mapId){
     for(const hs of s.heroes||[]){
       const h=G.heroes.find(x=>x.id===hs.id);
       if(!h)continue;
-      h.lvl=hs.lvl||1;h.recruited=!!hs.recruited;
+      h.lvl=hs.lvl||1;h.recruited=!!hs.recruited;h.asc=!!hs.asc;
       if(h.recruited&&h.hdef.legendary)vaultAddLegend(h.id); // heal the vault
-      const st=heroStat(h.hdef,h.lvl);
+      const st=heroStat(h.hdef,h.lvl,h.asc);
       h.hp=st.hp;h.maxHp=st.hp;
     }
+    for(const ws of s.walls||[]){
+      if(ws.pi>=MAP.P.length)continue;
+      const p=posAt(ws.pi,ws.d);
+      const hp=wallHpAt(s.wave,ws.lvl);
+      G.walls.push({isWall:true,pi:ws.pi,d:ws.d,x:p.x,y:p.y,ang:p.a,lvl:ws.lvl,hp,maxHp:hp,flash:0});
+    }
     G.intermission=CFG.INTERMISSION;
-    setBanner('Welcome back to the reef! Wave '+G.wave+' approaches…');
+    setBanner(THEME.txt.welcome(G.wave));
     return true;
   }catch(err){return false;}
 }
