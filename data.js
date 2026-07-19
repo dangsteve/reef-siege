@@ -391,5 +391,7 @@ const waveReward=w=>Math.round((60+14*w+(w%10===0?150+8*w:0))*(1+relicVal('treas
 const speedMul=w=>Math.min(1.25,1+0.003*w)*(MAP?MAP.def.mods.spd:1);
 const popCap=w=>Math.min(26,8+Math.floor(w/3)+Math.round(relicVal('banners')));
 const maxLives=()=>CFG.START_LIVES+Math.round(relicVal('walls'));
+const VET_KILLS=[20,60,160,400,1000];
+function towerRank(t){let s=0;for(const k of VET_KILLS)if((t.kills||0)>=k)s++;return s;}
 const eliteChance=w=>Math.min(0.28,(0.02+0.006*w)*(MAP?MAP.def.mods.elite:1));
 const champChance=w=>w<15?0:Math.min(0.13,0.008*(w-12)*(MAP?MAP.def.mods.elite:1));

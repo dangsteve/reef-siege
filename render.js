@@ -91,10 +91,11 @@ function drawTower(c,t){
   c.fillStyle='rgba(0,0,0,0.28)';
   c.beginPath();c.ellipse(t.x,t.y+9,17,7,0,0,7);c.fill();
   if(spr&&spr.base){
-    c.drawImage(spr.base,t.x-spr.ax,t.y-spr.ay);
+    const SC=0.8; // fit the tile: neighbors no longer overlap
+    c.drawImage(spr.base,t.x-spr.ax*SC,t.y-spr.ay*SC,spr.base.width*SC,spr.base.height*SC);
     if(spr.turret){
-      c.save();c.translate(t.x,t.y-(spr.mountH||24));c.rotate(t.ang);
-      c.drawImage(spr.turret,-spr.tpx,-spr.tpy);
+      c.save();c.translate(t.x,t.y-(spr.mountH||24)*SC);c.rotate(t.ang);
+      c.drawImage(spr.turret,-spr.tpx*SC,-spr.tpy*SC,spr.turret.width*SC,spr.turret.height*SC);
       c.restore();
     }
   }else{
@@ -104,18 +105,18 @@ function drawTower(c,t){
   if(t.id==='flame'){
     const fl=Math.sin(G.time*9+t.x)*2;
     c.fillStyle='rgba(255,158,60,0.85)';
-    c.beginPath();c.ellipse(t.x,t.y-34,5,8+fl,0,0,7);c.fill();
-    c.fillStyle='#ffe8a0';c.beginPath();c.ellipse(t.x,t.y-33,2.5,4+fl*0.6,0,0,7);c.fill();
+    c.beginPath();c.ellipse(t.x,t.y-28,5,8+fl,0,0,7);c.fill();
+    c.fillStyle='#ffe8a0';c.beginPath();c.ellipse(t.x,t.y-27,2.5,4+fl*0.6,0,0,7);c.fill();
   }
   if(t.id==='storm'){
     const pu=0.4+Math.sin(G.time*6+t.x)*0.2;
     c.fillStyle='rgba(180,140,232,'+pu*0.5+')';
-    c.beginPath();c.arc(t.x,t.y-44,9,0,7);c.fill();
+    c.beginPath();c.arc(t.x,t.y-36,9,0,7);c.fill();
   }
   if(t.id==='beacon'){
     const pu=0.25+Math.sin(G.time*3+t.x)*0.12;
     c.fillStyle='rgba(255,244,200,'+pu+')';
-    c.beginPath();c.arc(t.x,t.y-42,10,0,7);c.fill();
+    c.beginPath();c.arc(t.x,t.y-34,10,0,7);c.fill();
   }
   if(lvl>=5){
     const pu=0.35+Math.sin(G.time*4+t.x)*0.15;
@@ -126,6 +127,19 @@ function drawTower(c,t){
   c.fillStyle='#ffd75e';c.strokeStyle=OUT;c.lineWidth=1;
   for(let i=0;i<lvl;i++){
     c.beginPath();c.arc(t.x-10+i*5,t.y+15,1.9,0,7);c.fill();c.stroke();
+  }
+  /* veterancy stars (kill ranks: +3% dmg each) */
+  const stars=towerRank(t);
+  if(stars>0){
+    c.fillStyle='#ffe98a';c.strokeStyle=OUT;c.lineWidth=1;
+    for(let i=0;i<stars;i++){
+      const sx2=t.x-(stars-1)*3+i*6,sy2=t.y+22;
+      c.beginPath();
+      c.moveTo(sx2,sy2-2.6);c.lineTo(sx2+1.1,sy2-0.8);c.lineTo(sx2+2.6,sy2-0.6);
+      c.lineTo(sx2+1.4,sy2+0.7);c.lineTo(sx2+1.7,sy2+2.4);c.lineTo(sx2,sy2+1.5);
+      c.lineTo(sx2-1.7,sy2+2.4);c.lineTo(sx2-1.4,sy2+0.7);c.lineTo(sx2-2.6,sy2-0.6);
+      c.lineTo(sx2-1.1,sy2-0.8);c.closePath();c.fill();c.stroke();
+    }
   }
 }
 function drawTowerFallback(c,t,def,lvl){
@@ -836,9 +850,30 @@ function drawFrame(c,UIS){
   }
 
   /* build preview */
-  if(UIS.mode==='build'&&UIS.hoverC>=0){
-    const ok=canPlace(UIS.hoverC,UIS.hoverR)&&G.gold>=TOWER_BY[UIS.buildType].cost;
-    const x=UIS.hoverC*CFG.CELL,y=UIS.hoverR*CFG.CELL;
+  const pvC=UIS.pendC>=0?UIS.pendC:UIS.hoverC;
+  const pvR=UIS.pendC>=0?UIS.pendR:UIS.hoverR;
+  if(UIS.mode==='build'){
+    /* grid overlay: show every open tile */
+    const occ=new Set(G.towers.map(t=>t.c+','+t.r));
+    c.lineWidth=1;
+    for(let gr=0;gr<CFG.ROWS;gr++)for(let gc=0;gc<CFG.COLS;gc++){
+      const key=gc+','+gr;
+      if(MAP.blocked.has(key))continue;
+      const gx=gc*CFG.CELL,gy=gr*CFG.CELL;
+      if(occ.has(key)){
+        c.strokeStyle='rgba(230,120,90,0.25)';
+        c.strokeRect(gx+13,gy+13,CFG.CELL-26,CFG.CELL-26);
+      }else{
+        c.fillStyle='rgba(140,230,180,0.05)';
+        c.fillRect(gx+2,gy+2,CFG.CELL-4,CFG.CELL-4);
+        c.strokeStyle='rgba(140,230,180,0.16)';
+        c.strokeRect(gx+2.5,gy+2.5,CFG.CELL-5,CFG.CELL-5);
+      }
+    }
+  }
+  if(UIS.mode==='build'&&pvC>=0){
+    const ok=canPlace(pvC,pvR)&&G.gold>=TOWER_BY[UIS.buildType].cost;
+    const x=pvC*CFG.CELL,y=pvR*CFG.CELL;
     /* soft fill + corner ticks — never obscures what's on or near the tile */
     c.fillStyle=ok?'rgba(120,230,140,0.14)':'rgba(230,90,90,0.14)';
     c.fillRect(x,y,CFG.CELL,CFG.CELL);
@@ -858,6 +893,19 @@ function drawFrame(c,UIS){
       c.beginPath();c.arc(x+20,y+20,st.range,0,7);c.fill();
       c.strokeStyle='rgba(255,255,255,0.35)';c.lineWidth=1.5;
       c.beginPath();c.arc(x+20,y+20,st.range,0,7);c.stroke();
+    }
+    /* ghost of the tower being placed */
+    const gspr=towerSprite(UIS.buildType,1);
+    if(gspr&&gspr.base){
+      c.globalAlpha=ok?0.7:0.35;
+      const SC=0.8;
+      c.drawImage(gspr.base,x+20-gspr.ax*SC,y+20-gspr.ay*SC,gspr.base.width*SC,gspr.base.height*SC);
+      if(gspr.turret){
+        c.save();c.translate(x+20,y+20-(gspr.mountH||24)*SC);c.rotate(-Math.PI/2);
+        c.drawImage(gspr.turret,-gspr.tpx*SC,-gspr.tpy*SC,gspr.turret.width*SC,gspr.turret.height*SC);
+        c.restore();
+      }
+      c.globalAlpha=1;
     }
   }
   /* selected tower range */

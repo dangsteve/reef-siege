@@ -152,7 +152,8 @@
   }
   /* ============ letterbox side strips (phones) ============ */
   #sideL,#sideR{display:none;position:absolute;top:6px;z-index:7;flex-direction:column;gap:5px;
-    overflow-y:auto;scrollbar-width:none;width:60px;align-items:center;}
+    overflow-y:auto;scrollbar-width:none;width:60px;align-items:center;
+    -webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding-bottom:14px;}
   #sideL::-webkit-scrollbar,#sideR::-webkit-scrollbar{display:none;}
   #sideL{left:calc(4px + env(safe-area-inset-left,0px));bottom:44px;}
   #sideR{right:calc(4px + env(safe-area-inset-right,0px));bottom:240px;}
@@ -169,9 +170,11 @@
   /* phones with side strips: the bottom dock disappears entirely */
   body.sidebars #dock{display:none;}
   body.sidebars #stage{padding-bottom:0;}
-  body.sidebars #spellbar{bottom:max(10px, calc(env(safe-area-inset-bottom,0px) + 8px));}
+  body.sidebars #spellbar{flex-direction:column;align-items:center;gap:7px;
+    right:max(6px, calc(env(safe-area-inset-right,0px) + 4px));
+    bottom:max(8px, calc(env(safe-area-inset-bottom,0px) + 6px));}
   body.sidebars #sideL{bottom:8px;}
-  body.sidebars #sideR{bottom:238px;}
+  body.sidebars #sideR{bottom:205px;}
   /* targeting chips */
   .tgt-chip{font-size:9px;color:#9ad4ff;background:rgba(20,16,32,0.6);border:1px solid #16444e;
     padding:0 6px;border-radius:8px;line-height:1.5;}
@@ -206,6 +209,14 @@
     .wheel-box h1{font-size:17px;}
     #wheelCv{width:230px;height:230px;}
   }
+  /* ============ placement confirm bar ============ */
+  #confirmBar{display:none;position:absolute;z-index:9;gap:8px;}
+  #confirmBar button{width:46px;height:40px;font-size:20px;font-weight:bold;border-radius:10px;
+    box-shadow:0 3px 10px rgba(0,0,0,0.55);}
+  #cbOk{background:linear-gradient(180deg,#4a9a58,#357a42);border:1px solid #6cc47a;color:#eaffe8;}
+  #cbOk:hover:not(:disabled){filter:brightness(1.15);}
+  #cbNo{background:linear-gradient(180deg,#8f4444,#6d3232);border:1px solid #b85a5a;color:#ffd8d8;}
+  body.touch #confirmBar button{width:56px;height:48px;font-size:24px;}
   /* ============ rotate-your-phone overlay ============ */
   #rotateOverlay{display:none;position:fixed;inset:0;background:rgba(12,9,20,0.96);z-index:200;
     align-items:center;justify-content:center;text-align:center;color:#c8f0ea;font-size:18px;line-height:1.6;padding:24px;}
@@ -320,6 +331,10 @@
     <div id="cursorHint"></div>
     <div id="towerDetail"></div>
     <div id="spellbar"></div>
+    <div id="confirmBar">
+      <button id="cbOk">✓</button>
+      <button id="cbNo">✕</button>
+    </div>
     <div id="sideL"></div>
     <div id="sideR"></div>
   </div>

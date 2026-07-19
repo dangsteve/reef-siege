@@ -22,7 +22,7 @@ function newGame(mapId){
     rally:MAP.P.map(p=>p.total*0.5),
     waveActive:false, spawnQueue:[], spawnT:0, intermission:12,
     waveBanner:null, bannerT:0, shieldT:0, spun:false,
-    kills:0, bossKills:0, goldEarned:0, shake:0,
+    kills:0, bossKills:0, goldEarned:0, shake:0, streak:0, waveStartLives:CFG.START_LIVES,
     maintainT:0, auraT:0, targetMode:null,
   };
   TROOPS.forEach(t=>{G.troopLvl[t.id]=0;G.desired[t.id]=0;});
@@ -96,7 +96,7 @@ function placeTower(id,c,r){
   const def=TOWER_BY[id];
   if(!def||G.gold<def.cost||!canPlace(c,r))return false;
   G.gold-=def.cost;
-  G.towers.push({id,c,r,x:c*CFG.CELL+20,y:r*CFG.CELL+20,lvl:1,cd:0,ang:-Math.PI/2,auraMul:1,heat:0,tick:0});
+  G.towers.push({id,c,r,x:c*CFG.CELL+20,y:r*CFG.CELL+20,lvl:1,cd:0,ang:-Math.PI/2,auraMul:1,heat:0,tick:0,kills:0});
   burst(c*CFG.CELL+20,r*CFG.CELL+20,10,'#d8c9a0');
   SFXp('build');
   return true;
@@ -392,6 +392,7 @@ function startWave(bonus){
   if(G.waveActive||G.over)return;
   if(bonus>0){G.gold+=bonus;addText(CFG.W/2,90,'+'+bonus+'g early bonus!','#ffd75e');}
   G.waveActive=true;
+  G.waveStartLives=G.lives;
   G.spawnQueue=buildWaveSchedule(G.wave);
   injectEvents();
   G.spawnT=1.0;
@@ -403,6 +404,14 @@ function endWave(){
   const reward=waveReward(G.wave);
   G.gold+=reward;G.goldEarned+=reward;
   addText(CFG.W/2,120,'Wave '+G.wave+' cleared!  +'+reward+'g','#ffd75e');
+  /* perfect-wave streak: chain flawless waves for stacking bonus gold */
+  if(G.lives>=G.waveStartLives){
+    G.streak++;
+    const sb=Math.round(reward*0.1*Math.min(5,G.streak));
+    G.gold+=sb;G.goldEarned+=sb;
+    addText(CFG.W/2,152,'🔥 PERFECT WAVE ×'+G.streak+'!  +'+sb+'g','#ffa94e',1.6);
+    if(G.streak>=2)SFXp('chest');
+  }else G.streak=0;
   if(G.wave%5===0&&G.wave%10!==0){
     const chest=Math.round((40+10*G.wave)*(1+relicVal('treasury')));
     G.gold+=chest;G.goldEarned+=chest;
@@ -480,6 +489,7 @@ function damageEnemy(e,dmg,dtype,opts){
   }
   e.hp-=final;
   e.flash=0.1;
+  if(e.hp<=0&&!e.dead&&opts&&opts.srcT)opts.srcT.kills=(opts.srcT.kills||0)+1;
   if(final>=1&&G.texts.length<(LOW_FX?30:60)&&Math.random()<(LOW_FX?0.25:0.55))
     addText(e.x+rnd(-8,8),e.y-e.size-8,fmt(final),dtype==='magic'?'#9ad4ff':'#fff',0.8);
   if(e.hp<=0)killEnemy(e);
@@ -581,33 +591,33 @@ function towerFire(t,st,def){
   else tgt=inRange.reduce((a,b)=>(MAP.P[a.pi].total-a.d)<(MAP.P[b.pi].total-b.d)?a:b); // closest to the gate
 
   t.ang=Math.atan2(tgt.y-t.y,tgt.x-t.x);
-  const dmg=st.dmg*t.auraMul*(1+relicVal('engineering'));
+  const dmg=st.dmg*t.auraMul*(1+relicVal('engineering'))*(1+towerRank(t)*0.03);
   switch(def.id){
     case 'archer':
       for(let i=0;i<st.multishot;i++){
         const tg=i===0?tgt:(inRange[Math.floor(Math.random()*inRange.length)]);
-        G.projs.push({kind:'arrow',x:t.x,y:t.y-30,tgt:tg,lx:tg.x,ly:tg.y,spd:430,dmg,dtype:'phys'});
+        G.projs.push({kind:'arrow',x:t.x,y:t.y-30,tgt:tg,lx:tg.x,ly:tg.y,spd:430,dmg,dtype:'phys',srcT:t});
       }
       if(!LOW_FX)addFx({kind:'muzzle',x:t.x,y:t.y-30,ang:t.ang,life:0.08,col:'#e8dcb0'});
       SFXp('arrow');break;
     case 'frost':
-      G.projs.push({kind:'shard',x:t.x,y:t.y-32,tgt,lx:tgt.x,ly:tgt.y,spd:360,dmg,dtype:'magic',slow:st.slow,slowDur:st.slowDur});
+      G.projs.push({kind:'shard',x:t.x,y:t.y-32,tgt,lx:tgt.x,ly:tgt.y,spd:360,dmg,dtype:'magic',slow:st.slow,slowDur:st.slowDur,srcT:t});
       SFXp('frost');break;
     case 'cannon':{
       const tt=Math.hypot(tgt.x-t.x,tgt.y-t.y)/260;
       const px=tgt.x+Math.cos(posAt(tgt.pi,tgt.d).a)*tgt.baseSpeed*tt*0.6,py=tgt.y;
-      G.projs.push({kind:'ball',x0:t.x,y0:t.y-28,x1:px,y1:py,x:t.x,y:t.y-28,t:0,dur:tt,dmg,dtype:'phys',splash:st.splash});
+      G.projs.push({kind:'ball',x0:t.x,y0:t.y-28,x1:px,y1:py,x:t.x,y:t.y-28,t:0,dur:tt,dmg,dtype:'phys',splash:st.splash,srcT:t});
       addFx({kind:'muzzle',x:t.x+Math.cos(t.ang)*16,y:t.y-24+Math.sin(t.ang)*16,ang:t.ang,life:0.12,col:'#ffb02a'});
       G.shake=Math.max(G.shake,1.5);
       SFXp('cannon');break;}
     case 'poison':{
       const tt=Math.hypot(tgt.x-t.x,tgt.y-t.y)/240;
-      G.projs.push({kind:'glob',x0:t.x,y0:t.y-24,x1:tgt.x,y1:tgt.y,x:t.x,y:t.y-24,t:0,dur:tt,dmg,dtype:'magic',splash:st.splash,poison:st.poison,poisonDur:st.poisonDur});
+      G.projs.push({kind:'glob',x0:t.x,y0:t.y-24,x1:tgt.x,y1:tgt.y,x:t.x,y:t.y-24,t:0,dur:tt,dmg,dtype:'magic',splash:st.splash,poison:st.poison,poisonDur:st.poisonDur,srcT:t});
       SFXp('poison');break;}
     case 'ballista':{
       const a=t.ang;
       G.projs.push({kind:'bolt',x:t.x+Math.cos(a)*16,y:t.y-24+Math.sin(a)*16,vx:Math.cos(a)*540,vy:Math.sin(a)*540,
-        dist:st.range+40,dmg,dtype:'phys',pierce:st.pierce,hit:new Set()});
+        dist:st.range+40,dmg,dtype:'phys',pierce:st.pierce,hit:new Set(),srcT:t});
       SFXp('ballista');break;}
     case 'storm':{
       const pts=[{x:t.x,y:t.y-40}];
@@ -615,7 +625,7 @@ function towerFire(t,st,def){
       const hitSet=new Set();
       for(let i=0;i<st.chain&&cur;i++){
         hitSet.add(cur);
-        damageEnemy(cur,d,'magic');
+        damageEnemy(cur,d,'magic',{srcT:t});
         pts.push({x:cur.x,y:cur.y});
         d*=0.75;
         let next=null,bd=90*90;
@@ -629,7 +639,7 @@ function towerFire(t,st,def){
       addFx({kind:'zap',pts,life:0.18});
       SFXp('zap');break;}
     case 'flame':{
-      damageEnemy(tgt,dmg,'magic');
+      damageEnemy(tgt,dmg,'magic',{srcT:t});
       tgt.burnT=st.burnDur;tgt.burnDps=Math.max(tgt.burnDps,st.burn*t.auraMul*(1+relicVal('engineering')));
       for(let i=0;i<(LOW_FX?1:2);i++){
         if(G.parts.length<(LOW_FX?220:520)){
@@ -873,7 +883,7 @@ function subStep(dt){
       if(L<10){
         p.done=true;
         if(p.tgt&&!p.tgt.dead){
-          damageEnemy(p.tgt,p.dmg,p.dtype);
+          damageEnemy(p.tgt,p.dmg,p.dtype,{srcT:p.srcT});
           if(p.slow){p.tgt.slowT=Math.max(p.tgt.slowT,p.slowDur);p.tgt.slowP=Math.max(p.tgt.slowP,p.tgt.boss?p.slow*0.4:p.slow);burst(p.tgt.x,p.tgt.y,3,'#aee6ff');}
         }
       }else{p.x+=dx/L*p.spd*dt;p.y+=dy/L*p.spd*dt;p.ang=Math.atan2(dy,dx);}
@@ -890,7 +900,7 @@ function subStep(dt){
         for(const e of G.enemies){
           if(e.dead||e.def.fly)continue; // ground bursts can't reach flyers
           if(dist2(e.x,e.y,p.x1,p.y1)<p.splash*p.splash){
-            damageEnemy(e,p.dmg,p.dtype);
+            damageEnemy(e,p.dmg,p.dtype,{srcT:p.srcT});
             if(p.poison&&!e.dead){
               if(e.poison.length<6)e.poison.push({t:p.poisonDur,dps:p.poison});
               else e.poison[0]={t:p.poisonDur,dps:p.poison};
@@ -905,7 +915,7 @@ function subStep(dt){
         if(e.dead||p.hit.has(e))continue;
         if(dist2(e.x,e.y,p.x,p.y)<(e.size+7)*(e.size+7)){
           p.hit.add(e);
-          damageEnemy(e,p.dmg,'phys');
+          damageEnemy(e,p.dmg,'phys',{srcT:p.srcT});
           burst(e.x,e.y,4,'#d8c9a0');
           if(p.hit.size>=p.pierce){p.done=true;break;}
         }
@@ -1219,7 +1229,8 @@ function saveKey(){return 'cs2_save_'+G.mapId;}
 function saveGame(){
   try{
     const s={v:3,mapId:G.mapId,gold:G.gold,lives:G.lives,wave:G.wave,
-      towers:G.towers.map(t=>({id:t.id,c:t.c,r:t.r,lvl:t.lvl})),
+      towers:G.towers.map(t=>({id:t.id,c:t.c,r:t.r,lvl:t.lvl,k:t.kills||0})),
+      streak:G.streak,
       troopLvl:G.troopLvl,desired:G.desired,rally:G.rally,
       heroes:G.heroes.map(h=>({id:h.id,lvl:h.lvl,recruited:h.recruited})),
       relics:G.relics,spun:G.spun,
@@ -1238,7 +1249,7 @@ function loadGame(mapId){
     newGame(mapId);
     G.gold=s.gold;G.lives=s.lives;G.wave=s.wave;
     G.kills=s.kills||0;G.bossKills=s.bossKills||0;G.goldEarned=s.goldEarned||0;
-    G.autoWave=s.autoWave!==false;G.speed=s.speed||1;G.spun=!!s.spun;
+    G.autoWave=s.autoWave!==false;G.speed=s.speed||1;G.spun=!!s.spun;G.streak=s.streak||0;
     if(Array.isArray(s.rally))G.rally=MAP.P.map((p,i)=>clamp(s.rally[i]||p.total*0.5,40,p.total-60));
     Object.assign(G.troopLvl,s.troopLvl||{});
     Object.assign(G.desired,s.desired||{});
@@ -1251,7 +1262,7 @@ function loadGame(mapId){
     G.towers=[];
     for(const t of s.towers||[]){
       if(!TOWER_BY[t.id])continue;
-      G.towers.push({id:t.id,c:t.c,r:t.r,x:t.c*CFG.CELL+20,y:t.r*CFG.CELL+20,lvl:t.lvl,cd:0,ang:-Math.PI/2,auraMul:1,heat:0,tick:0});
+      G.towers.push({id:t.id,c:t.c,r:t.r,x:t.c*CFG.CELL+20,y:t.r*CFG.CELL+20,lvl:t.lvl,cd:0,ang:-Math.PI/2,auraMul:1,heat:0,tick:0,kills:t.k||0});
     }
     for(const hs of s.heroes||[]){
       const h=G.heroes.find(x=>x.id===hs.id);

@@ -8,7 +8,7 @@ function SFXp(n){try{if(typeof SFX2!=='undefined')SFX2.play(n);}catch(err){}}
 const IS_TOUCH=(function(){
   try{return matchMedia('(pointer: coarse)').matches||'ontouchstart' in window;}catch(err){return false;}
 })();
-const UIS={mode:'none',buildType:null,selTower:null,hoverC:-1,hoverR:-1,hoverX:-1,hoverY:-1,tab:'towers',tapArmed:false};
+const UIS={mode:'none',buildType:null,selTower:null,hoverC:-1,hoverR:-1,hoverX:-1,hoverY:-1,tab:'towers',tapArmed:false,pendC:-1,pendR:-1,dragPlace:false};
 let started=false;
 let canvas,ctx;
 const $=id=>document.getElementById(id);
@@ -40,6 +40,7 @@ window.addEventListener('DOMContentLoaded',()=>{
   buildSideBars();
   buildSpellBar();
   bindHud();
+  bindConfirmBar();
   window.addEventListener('resize',updateSidebarsVisible);
   bindCanvas();
   bindKeys();
@@ -271,7 +272,7 @@ function setCursorHint(txt){
 function refreshHud(){
   $('stGold').textContent=fmt(G.gold);
   $('stLives').textContent=G.lives+'/'+maxLives();
-  $('stWave').textContent=G.wave;
+  $('stWave').textContent=G.wave+(G.streak>1?' 🔥'+G.streak:'');
   $('stPop').textContent=G.troops.length+'/'+popCap(G.wave);
   const btn=$('btnWave');
   if(G.waveActive){
@@ -315,10 +316,11 @@ function buildTowerCards(){
 function selectBuildType(def){
   if(UIS.mode==='build'&&UIS.buildType===def.id){cancelMode();return;}
   UIS.mode='build';UIS.buildType=def.id;UIS.selTower=null;UIS.tapArmed=false;
+  UIS.pendC=-1;UIS.pendR=-1;
   if(G)G.targetMode=null;
   syncBuildSelection();
-  setCursorHint(IS_TOUCH?('Tap a tile to place '+def.name+', tap again to confirm'):
-    ('Click an empty tile to build '+def.name+' — Shift-click builds several, Esc cancels'));
+  setCursorHint(IS_TOUCH?('Drag '+def.name+' where you want it, then tap ✓'):
+    ('Move the ghost with your mouse, click to set it down, then ✓ to build'));
   hideTowerDetail();
   SFXp('ui_click');
 }
@@ -401,6 +403,8 @@ function updateSidebarsVisible(){
 }
 function cancelMode(){
   UIS.mode='none';UIS.buildType=null;UIS.tapArmed=false;
+  UIS.pendC=-1;UIS.pendR=-1;UIS.dragPlace=false;
+  const cb=$('confirmBar');if(cb)cb.style.display='none';
   if(G)G.targetMode=null;
   syncBuildSelection();
   setCursorHint('');
@@ -422,6 +426,9 @@ function showTowerDetail(t){
   if(st.pierce)stats+='<span>➤ '+st.pierce+'</span>';
   if(st.income)stats+='<span>🪙 +'+st.income+'g/5s</span>';
   if(st.aura)stats+='<span>✨ +'+Math.round(st.aura*100)+'%</span>';
+  const stars=towerRank(t);
+  if(stars>0)stats+='<span>★'.repeat(1)+stars+' veteran +'+(stars*3)+'% ⚔ ('+(t.kills||0)+' kills)</span>';
+  else if(t.kills)stats+='<span>'+t.kills+' kills</span>';
   const maxed=t.lvl>=CFG.MAX_TOWER_LVL;
   const upCost=maxed?0:towerUpCost(def,t.lvl);
   box.innerHTML='<div class="td-head">'+def.name+' <span class="lvl-badge">Lv '+t.lvl+(maxed?' MAX':'')+'</span>'+
@@ -808,6 +815,51 @@ function showWheel(){
   };
 }
 
+/* ================= placement confirm bar ================= */
+function stagePos(wx,wy){
+  const stage=$('stage');
+  const r=canvas.getBoundingClientRect(),sr=stage.getBoundingClientRect();
+  const scale=Math.min(r.width/CFG.W,r.height/CFG.H);
+  const ox=(r.width-CFG.W*scale)/2+(r.left-sr.left);
+  const oy=(r.height-CFG.H*scale)/2+(r.top-sr.top);
+  return {x:ox+wx*scale,y:oy+wy*scale,scale};
+}
+function setPending(cc,rr2){
+  if(UIS.mode!=='build')return;
+  UIS.pendC=cc;UIS.pendR=rr2;
+  UIS.hoverC=cc;UIS.hoverR=rr2;
+  positionConfirmBar();
+}
+function clearPending(){
+  UIS.pendC=-1;UIS.pendR=-1;
+  $('confirmBar').style.display='none';
+}
+function positionConfirmBar(){
+  if(UIS.pendC<0){$('confirmBar').style.display='none';return;}
+  const bar=$('confirmBar');
+  bar.style.display='flex';
+  const ok=canPlace(UIS.pendC,UIS.pendR)&&G.gold>=TOWER_BY[UIS.buildType].cost;
+  $('cbOk').disabled=!ok;
+  const p=stagePos(UIS.pendC*CFG.CELL+20,UIS.pendR*CFG.CELL-30);
+  const sr=$('stage').getBoundingClientRect();
+  const bw=bar.offsetWidth||110,bh=bar.offsetHeight||44;
+  let left=p.x-bw/2,top=p.y-bh;
+  if(top<6)top=stagePos(UIS.pendC*CFG.CELL+20,(UIS.pendR+1)*CFG.CELL+16).y;
+  bar.style.left=clamp(left,6,sr.width-bw-6)+'px';
+  bar.style.top=clamp(top,6,sr.height-bh-6)+'px';
+}
+function bindConfirmBar(){
+  $('cbOk').onclick=()=>{
+    if(UIS.pendC<0)return;
+    if(placeTower(UIS.buildType,UIS.pendC,UIS.pendR)){
+      clearPending();
+      if(G.gold<TOWER_BY[UIS.buildType].cost)cancelMode();
+      else setCursorHint(IS_TOUCH?'Drag or tap to position the next one — ✕ to stop':'Click to position the next one — ✕ or Esc to stop');
+    }
+  };
+  $('cbNo').onclick=()=>{cancelMode();};
+}
+
 /* ================= canvas input ================= */
 function canvasPos(ev){
   const r=canvas.getBoundingClientRect();
@@ -833,17 +885,9 @@ function bindCanvas(){
       setCursorHint('');refreshCards();return;
     }
     if(UIS.mode==='build'){
-      /* touch: first tap previews the tile, second tap on the same tile confirms */
-      if(IS_TOUCH&&!(UIS.tapArmed&&UIS.hoverC===c&&UIS.hoverR===r)){
-        UIS.hoverC=c;UIS.hoverR=r;UIS.hoverX=p.x;UIS.hoverY=p.y;UIS.tapArmed=true;
-        setCursorHint(canPlace(c,r)?'Tap again to build here':'Blocked tile — tap an open one');
-        return;
-      }
-      UIS.tapArmed=false;
-      if(placeTower(UIS.buildType,c,r)){
-        if(!ev.shiftKey||G.gold<TOWER_BY[UIS.buildType].cost)cancelMode();
-        else if(IS_TOUCH)setCursorHint('Tap a tile to build another '+TOWER_BY[UIS.buildType].name);
-      }
+      /* set (or move) the ghost; ✓/✗ buttons confirm */
+      setPending(c,r);
+      setCursorHint(canPlace(c,r)?'':'Blocked tile — pick an open one');
       return;
     }
     if(UIS.mode==='hero'&&G.selHero){moveHeroTo(G.selHero,p.x,p.y);UIS.mode='none';setCursorHint('');return;}
@@ -865,6 +909,23 @@ function bindCanvas(){
     if(t){UIS.selTower=t;showTowerDetail(t);positionTowerDetail(t);SFXp('ui_click');}
     else{UIS.selTower=null;hideTowerDetail();}
   });
+  /* touch: drag the ghost around, release, then ✓ */
+  canvas.addEventListener('pointerdown',ev=>{
+    if(!IS_TOUCH||!started||!G||G.over)return;
+    if(UIS.mode!=='build')return;
+    const p=canvasPos(ev);
+    if(p.x<0||p.y<0||p.x>CFG.W||p.y>CFG.H)return;
+    UIS.dragPlace=true;
+    setPending(Math.floor(p.x/CFG.CELL),Math.floor(p.y/CFG.CELL));
+  },{passive:true});
+  canvas.addEventListener('pointermove',ev=>{
+    if(!UIS.dragPlace)return;
+    const p=canvasPos(ev);
+    setPending(clamp(Math.floor(p.x/CFG.CELL),0,CFG.COLS-1),clamp(Math.floor(p.y/CFG.CELL),0,CFG.ROWS-1));
+  },{passive:true});
+  window.addEventListener('pointerup',()=>{
+    if(UIS.dragPlace){UIS.dragPlace=false;positionConfirmBar();}
+  },{passive:true});
   canvas.addEventListener('contextmenu',ev=>{
     ev.preventDefault();
     cancelMode();
