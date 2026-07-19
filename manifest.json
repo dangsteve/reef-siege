@@ -1,0 +1,15 @@
+{
+  "name": "Reef Siege — Deep-Sea Defense",
+  "short_name": "Reef Siege",
+  "description": "Endless undersea tower defense built for multitasking. Towers auto-fight, your shoal auto-resummons, heroes auto-cast.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0a1a26",
+  "theme_color": "#12303e",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
