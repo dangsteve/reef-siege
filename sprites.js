@@ -120,12 +120,12 @@ const SpriteLib = (function () {
     }
   };
 
-  function drawGround(g, T, theme, R) {
-    const W = 1280, H = 720;
+  function drawGround(g, T, theme, R, W2, H2) {
+    const W = W2 || 1280, H = H2 || 720, AF = (W * H) / 921600;
     g.fillStyle = T.ground;
     g.fillRect(0, 0, W, H);
     // large soft tonal patches (ambience gradients allowed)
-    for (let i = 0; i < 26; i++) {
+    for (let i = 0; i < Math.round(26 * AF); i++) {
       const x = R() * W, y = R() * H, r = 90 + R() * 190;
       const col = T.patch[(R() * T.patch.length) | 0];
       const gr = g.createRadialGradient(x, y, 0, x, y, r);
@@ -135,7 +135,7 @@ const SpriteLib = (function () {
       g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
     }
     // fine noise speckle
-    for (let i = 0; i < 2600; i++) {
+    for (let i = 0; i < Math.round(2600 * AF); i++) {
       const x = R() * W, y = R() * H;
       g.fillStyle = sh(T.speck[(R() * T.speck.length) | 0], 0.9 + R() * 0.25, 0.16 + R() * 0.2);
       const s = 1 + R() * 2.2;
@@ -143,7 +143,7 @@ const SpriteLib = (function () {
     }
     if (theme === 'ashen') {
       // ember cracks + glow patches
-      for (let i = 0; i < 26; i++) {
+      for (let i = 0; i < Math.round(26 * AF); i++) {
         const x = R() * W, y = R() * H;
         glow(g, x, y, 26 + R() * 40, '#e8712a', 0.12 + R() * 0.1);
         g.strokeStyle = rgba(255, 120 + R() * 60, 40, 0.75);
@@ -155,7 +155,7 @@ const SpriteLib = (function () {
         g.stroke();
       }
       // charred speckle
-      for (let i = 0; i < 500; i++) {
+      for (let i = 0; i < Math.round(500 * AF); i++) {
         g.fillStyle = rgba(16, 12, 16, 0.3 + R() * 0.3);
         g.fillRect(R() * W, R() * H, 1 + R() * 3, 1 + R() * 2);
       }
@@ -219,12 +219,13 @@ const SpriteLib = (function () {
     }
   }
 
-  function vignette(g) {
-    const gr = g.createRadialGradient(640, 340, 320, 640, 360, 800);
+  function vignette(g, w, h) {
+    w = w || 1280; h = h || 720;
+    const gr = g.createRadialGradient(w / 2, h / 2 - 20, Math.min(w, h) * 0.45, w / 2, h / 2, Math.max(w, h) * 0.62);
     gr.addColorStop(0, 'rgba(0,0,0,0)');
     gr.addColorStop(1, 'rgba(10,6,16,0.34)');
     g.fillStyle = gr;
-    g.fillRect(0, 0, 1280, 720);
+    g.fillRect(0, 0, w, h);
   }
 
   function samplePath(pts, step) {
@@ -730,13 +731,13 @@ const SpriteLib = (function () {
   }
 
   function terrain(map) {
-    const c = cv(1280, 720);
+    const c = cv(map.w || 1280, map.h || 720);
     const g = c.getContext('2d');
     const theme = map.theme || 'meadow';
     const T = (FLAVOR==='reef'?REEF_THEMES:THEMES)[theme] || THEMES.meadow;
     const R = mulberry32(theme === 'meadow' ? 1001 : theme === 'autumn' ? 2002 : 3003);
-    drawGround(g, T, theme, R);
-    vignette(g);
+    drawGround(g, T, theme, R, c.width, c.height);
+    vignette(g, c.width, c.height);
     drawPaths(g, T, map.pathsPx || [], R);
     for (const sp of (map.spawns || [])) drawPortal(g, T, sp.x, sp.y, R);
     const decor = (map.decor || []).slice().sort((a, b) => a.y - b.y);
@@ -746,10 +747,11 @@ const SpriteLib = (function () {
   }
 
   /* =================== TOWERS =================== */
-  const TOWER_IDS = ['archer', 'cannon', 'frost', 'flame', 'ballista', 'poison', 'storm', 'mint', 'beacon', 'arbalest'];
+  const TOWER_IDS = ['archer', 'cannon', 'frost', 'flame', 'ballista', 'poison', 'storm', 'mint', 'beacon', 'arbalest', 'barracks', 'lodge', 'siegecamp'];
   const TOWER_HUE = {
     archer: '#c9a227', cannon: '#7a7f8a', frost: '#69c8e8', flame: '#e8712a',
-    ballista: '#a8743a', poison: '#7ec244', storm: '#b48ce8', mint: '#e8c93a', beacon: '#f0e6b4', arbalest: '#7a94b8', wall: '#8d8798'
+    ballista: '#a8743a', poison: '#7ec244', storm: '#b48ce8', mint: '#e8c93a', beacon: '#f0e6b4', arbalest: '#7a94b8', wall: '#8d8798',
+    barracks: '#b0623c', lodge: '#3a7a44', siegecamp: '#7a7f8a'
   };
   const WOOD = '#96683a', STONE = '#9a95a4', GOLD = '#e8c34a';
 
@@ -1391,7 +1393,8 @@ const SpriteLib = (function () {
   }
   const TOWER_PAINT = {
     archer: tArcher, cannon: tCannon, frost: tFrost, flame: tFlame,
-    ballista: tBallista, poison: tPoison, storm: tStorm, mint: tMint, beacon: tBeacon, arbalest: tBallista
+    ballista: tBallista, poison: tPoison, storm: tStorm, mint: tMint, beacon: tBeacon, arbalest: tBallista,
+    barracks: tMint, lodge: tArcher, siegecamp: tCannon
   };
   function turretArbalest(lvl) {
     const t = turretBallista(Math.min(5, lvl + 1));
@@ -2015,6 +2018,43 @@ const SpriteLib = (function () {
       g.fillStyle = '#d8fff4';
       g.beginPath(); g.arc(18.6, 12, 1.4, 0, Math.PI * 2); g.arc(25.4, 12, 1.4, 0, Math.PI * 2); g.fill();
     },
+  };
+  ICON_PAINT.troop.templar = function (g) { // kite shield with gold cross
+    splash(g, '#e8ce6a');
+    g.fillStyle = '#f0e6c8';
+    g.beginPath(); g.moveTo(22, 8); g.quadraticCurveTo(32, 10, 32, 20); g.quadraticCurveTo(32, 32, 22, 38);
+    g.quadraticCurveTo(12, 32, 12, 20); g.quadraticCurveTo(12, 10, 22, 8); g.closePath(); g.fill(); outl(g, 2.4);
+    g.strokeStyle = '#c9a227'; g.lineWidth = 3;
+    g.beginPath(); g.moveTo(22, 12); g.lineTo(22, 32); g.moveTo(15, 19); g.lineTo(29, 19); g.stroke();
+  };
+  ICON_PAINT.troop.stormcaller = function (g) { // storm orb with bolt
+    splash(g, '#7ab8e8');
+    g.fillStyle = '#2a4a7a';
+    g.beginPath(); g.arc(22, 22, 11, 0, Math.PI * 2); g.fill(); outl(g, 2.4);
+    g.fillStyle = '#aee0ff';
+    g.beginPath(); g.moveTo(24, 10); g.lineTo(16, 24); g.lineTo(22, 24); g.lineTo(19, 35); g.lineTo(29, 20); g.lineTo(23, 20); g.closePath();
+    g.fill(); outl(g, 1.6);
+  };
+  ICON_PAINT.hero.seraphine = function (g) { // storm oracle: deep-blue hood, arc crown
+    bustBase(g, '#2a4a7a', '#e8d0c0');
+    g.strokeStyle = '#8ad4ff'; g.lineWidth = 2.4;
+    g.beginPath(); g.moveTo(12, 10); g.lineTo(18, 5); g.lineTo(16, 11); g.lineTo(24, 4); g.stroke();
+    g.fillStyle = '#8ad4ff';
+    g.beginPath(); g.arc(17, 17, 1.8, 0, 7); g.fill();
+    g.beginPath(); g.arc(27, 17, 1.8, 0, 7); g.fill();
+    glow(g, 22, 14, 10, '#8ad4ff', 0.35);
+  };
+  ICON_PAINT.hero.garrick = function (g) { // gold-trimmed great helm + tower shield
+    bustBase(g, '#4a3f68', null);
+    g.fillStyle = '#b8bfcf';
+    g.beginPath(); g.arc(22, 15, 10, Math.PI, 0); g.lineTo(32, 26); g.lineTo(12, 26); g.closePath(); g.fill(); outl(g, 2.2);
+    g.fillStyle = '#181428'; rr(g, 14, 14, 16, 3.6, 1.8); g.fill();
+    g.strokeStyle = '#d8b45a'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(12, 26); g.lineTo(32, 26); g.stroke();
+    g.fillStyle = '#4a3f68';
+    rr(g, 29, 16, 9, 18, 3); g.fill(); outl(g, 2);
+    g.strokeStyle = '#d8b45a'; g.lineWidth = 1.6;
+    rr(g, 31, 19, 5, 12, 2); g.stroke();
   };
   ICON_PAINT.hero.drake = function (g) { // sky drake hero: horned drake head
     glow(g, 22, 15, 14, '#ff9a5e', 0.4);

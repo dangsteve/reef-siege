@@ -6,6 +6,7 @@
 
 const CFG = {
   W: 1280, H: 720, CELL: 40, COLS: 32, ROWS: 18,
+  BASE_COLS: 32, BASE_ROWS: 18,
   START_GOLD: 240, START_LIVES: 20,
   ENGAGE_R: 30, ENEMY_ATK_R: 36, AGGRO_R: 115,
   INTERMISSION: 9, MAX_TOWER_LVL: 5, MAX_TROOP_LVL: 9, MAX_HERO_LVL: 200,
@@ -109,18 +110,22 @@ const THEME_DECOR={
   autumn:['tree','tree','stump','pine','rock','bush','flowers','tree'],
   ashen:['rock','rock','stump','crystal','stump','rock','crystal','bush'],
 };
-function initMapRuntime(def){
-  const P=def.paths.map(buildPath);
-  MAP={def,P,blocked:new Set(),decor:[],spawns:P.map(p=>({x:p.pts[0].x,y:p.pts[0].y}))};
+function initMapRuntime(def,pathCells){
+  const cells=pathCells||def.paths;
+  const P=cells.map(buildPath);
+  const dyT=CFG.ROWS-CFG.BASE_ROWS;
+  MAP={def,P,blocked:new Set(),decor:[],spawns:P.map(p=>({x:p.pts[0].x,y:p.pts[0].y})),
+    castle:{x:CFG.W-45,y:(8.5+dyT)*CFG.CELL}};
   for(let r=0;r<CFG.ROWS;r++)for(let c=0;c<CFG.COLS;c++){
     const x=c*CFG.CELL+20,y=r*CFG.CELL+20;
     if(distToPaths(x,y)<38)MAP.blocked.add(c+','+r);
   }
-  for(let r=5;r<=11;r++)for(let c=28;c<=31;c++)MAP.blocked.add(c+','+r);
+  {const dyT2=CFG.ROWS-CFG.BASE_ROWS;
+  for(let r=5+dyT2;r<=11+dyT2;r++)for(let c=CFG.COLS-4;c<CFG.COLS;c++)MAP.blocked.add(c+','+r);}
   const rng=mulberry32(def.id.length*7919+def.paths.length*104729+11840);
   const kinds=THEME_DECOR[def.theme];
   let tries=0;
-  const want=def.paths.length===1?26:(def.paths.length===2?20:16);
+  const want=Math.round((def.paths.length===1?26:(def.paths.length===2?20:16))*(CFG.COLS*CFG.ROWS)/(CFG.BASE_COLS*CFG.BASE_ROWS));
   while(MAP.decor.length<want&&tries<800){
     tries++;
     const c=Math.floor(rng()*CFG.COLS),r=Math.floor(rng()*CFG.ROWS);
@@ -156,6 +161,12 @@ const TOWERS=[
   desc:'+damage aura for towers in range. Stacks.', hue:'#f0e6b4'},
  {id:'arbalest', name:'Great Arbalest', cost:260, dmg:150, rate:0.16, range:330, dtype:'phys', proj:'bolt', pierce:1, snd:'ballista', targets:'both',
   desc:'Slow-loading siege crossbow. Colossal bolts at extreme range; aims at flyers first.', hue:'#7a94b8'},
+ {id:'barracks', name:'Barracks', cost:220, rate:0, range:0, dtype:'none', proj:'none', snd:'build', spawnTroop:'footman', spawnN:2, spawnCd:11,
+  desc:'Garrisons footmen onto the nearest road. They fight until slain or spent.', hue:'#b0623c'},
+ {id:'lodge', name:'Ranger Lodge', cost:240, rate:0, range:0, dtype:'none', proj:'none', snd:'build', spawnTroop:'ranger', spawnN:2, spawnCd:12,
+  desc:'Fields rangers who pepper the road — and the sky — with arrows.', hue:'#3a7a44'},
+ {id:'siegecamp', name:'Siege Workshop', cost:340, rate:0, range:0, dtype:'none', proj:'none', snd:'build', spawnTroop:'wargolem', spawnN:1, spawnCd:16,
+  desc:'Assembles a lumbering war golem that cleaves whole packs.', hue:'#7a7f8a'},
  {id:'wall', name:'Barricade', cost:200, wall:true, rate:0, range:0, dtype:'none', proj:'none', snd:'build',
   desc:'Blocks the road — enemies must batter it down. Build ON the path.', hue:'#8d8798'},
 ];
@@ -183,6 +194,10 @@ function towerStat(def,lvl){
 }
 const towerUpCost=(def,lvl)=>Math.round(def.cost*0.85*Math.pow(lvl,1.55));
 function towerInvested(def,lvl){let s=def.cost;for(let l=1;l<lvl;l++)s+=towerUpCost(def,l);return s;}
+/* tower promotion tiers: 1 bronze → 2 silver → 3 gold (unlocked at max level) */
+const TOWER_TIER_MULT=1.4;
+const towerTierMul=t=>Math.pow(TOWER_TIER_MULT,((t&&t.tier)||1)-1);
+const towerPromoCost=(def,tier)=>Math.round(towerInvested(def,CFG.MAX_TOWER_LVL)*(tier===1?1.2:2.6));
 
 /* ============================================================
    TROOPS — 12 summonable types
@@ -200,17 +215,29 @@ const TROOPS=[
  {id:'cavalry',  name:'Cavalry',     cost:120, hp:160, dmg:19, rate:0.8, speed:118, melee:true,  unlock:16, snd:'melee_hit2', desc:'Fast riders that rush the front.'},
  {id:'paladin',  name:'Paladin',     cost:160, hp:350, dmg:17, rate:0.95,speed:54,  melee:true,  armor:0.35, selfHeal:0.015, unlock:18, snd:'melee_hit3', desc:'Armored, self-healing champion.'},
  {id:'giant',    name:'Giant',       cost:250, hp:950, dmg:48, rate:1.7, speed:44,  melee:true,  cleave:45, unlock:20, snd:'giant_smash', desc:'Colossal smasher. Cleaves groups.'},
+ {id:'templar',  name:'Templar',     cost:210, hp:520, dmg:24, rate:0.9, speed:60,  melee:true,  armor:0.4, selfHeal:0.02, unlock:30, snd:'melee_hit3', desc:'Holy bulwark. Heavy armor, mends his own wounds.'},
+ {id:'stormcaller',name:'Stormcaller',cost:260, hp:120, dmg:36, rate:1.4, speed:62,  melee:false, range:170, splash:55, unlock:40, snd:'mage_bolt', desc:'Storm bolts crack over whole packs. Hits air.'},
  {id:'skeleton', name:'Risen Skeleton', cost:0, hp:80, dmg:9, rate:0.9, speed:70, melee:true, unlock:999, summon:true, snd:'melee_hit1', desc:'Raised from fallen foes. Fights until it crumbles.'},
+ {id:'footman',  name:'Footman',     cost:0,   hp:130, dmg:11, rate:0.9, speed:70,  melee:true,  armor:0.15, unlock:999, summon:true, snd:'melee_hit1', desc:'Garrison soldier from your Barracks.'},
+ {id:'ranger',   name:'Ranger',      cost:0,   hp:70,  dmg:13, rate:1.0, speed:70,  melee:false, range:160, unlock:999, summon:true, snd:'arrow', desc:'Garrison archer from your Ranger Lodge.'},
+ {id:'wargolem', name:'War Golem',   cost:0,   hp:900, dmg:52, rate:1.6, speed:46,  melee:true,  cleave:50, armor:0.3, unlock:999, summon:true, snd:'giant_smash', desc:'Siege construct from your Workshop.'},
 ];
 const TROOP_BY={};TROOPS.forEach(t=>TROOP_BY[t.id]=t);
-const ALL_TROOPS_WAVE=Math.max(...TROOPS.map(t=>t.unlock)); // 20
+const ALL_TROOPS_WAVE=Math.max(...TROOPS.filter(t=>!t.summon).map(t=>t.unlock));
 
 function troopStat(id,lvl){
-  const d=TROOP_BY[id],m=Math.pow(1.32,lvl);
+  const d=TROOP_BY[id];
+  const tm=(typeof G!=='undefined'&&G&&G.troopTier)?troopTierMul(G.troopTier[id]||0):1;
+  const m=Math.pow(1.32,lvl)*tm;
   return {hp:d.hp*m,dmg:d.dmg*m,heal:(d.heal||0)*m,rate:d.rate,speed:d.speed,
     range:d.range||0,armor:d.armor||0,cost:Math.round(d.cost*(1+0.1*lvl))};
 }
 const troopUpCost=(id,lvl)=>Math.round(TROOP_BY[id].cost*2.4*Math.pow(1.55,lvl));
+/* troop promotions: bronze (base) → silver Veteran → gold Grand */
+const TIER_NAMES=['','⟡ Veteran ','★ Grand '];
+const TROOP_TIER_MULT=1.55;
+const troopTierMul=t=>Math.pow(TROOP_TIER_MULT,t||0);
+const troopPromoCost=(id,tier)=>Math.round(TROOP_BY[id].cost*(tier===1?90:260));
 
 /* ============================================================
    HEROES — 6 recruitable champions
@@ -251,6 +278,16 @@ const HEROES=[
   skill:{id:'skysweep', name:'Sky Sweep', unlockLvl:3, cd:12, snd:'skill_meteor',
     desc:'Scours the heavens: massive damage to every flyer, embers rain below.'},
   passive:{lvl:8, name:'Windlord', desc:'Double damage against flying enemies.'}},
+ {id:'seraphine', name:'Seraphine Stormcrown', title:'Oracle of Tempests', unlockWave:90, cost:15000,
+  hp:900, dmg:120, rate:0.9, speed:92, melee:false, range:200, dtype:'magic', col:'#8ad4ff', cape:'#2a4a7a', snd:'hero_magnus_atk',
+  skill:{id:'tempest', name:'Tempest', unlockLvl:3, cd:13, snd:'skill_meteor',
+    desc:'Calls a rolling thunderhead: chained lightning racks up to 12 foes.'},
+  passive:{lvl:8, name:'Static Veil', desc:'Her bolts arc to a second nearby target.'}},
+ {id:'garrick', name:'Garrick the Unbroken', title:'Shield of the Realm', unlockWave:110, cost:24000,
+  hp:2400, dmg:95, rate:1.0, speed:78, melee:true, cleave:55, col:'#d8b45a', cape:'#4a3f68', snd:'hero_bjorn_atk',
+  skill:{id:'bulwark', name:'Bulwark', unlockLvl:3, cd:15, snd:'skill_warcry',
+    desc:'Plants his shield: taunts nearby foes onto himself, heals and hardens for 5s.'},
+  passive:{lvl:8, name:'Living Fortress', desc:'Takes 40% less damage.'}},
  /* ---- LEGENDARIES: rescued from Shadow Wardens (rare events), kept forever in the Vault ---- */
  {id:'aurelia', name:'Aurelia the Dawnblade', title:'Legend of the First Light', legendary:true, unlockWave:-1, cost:0,
   hp:1100, dmg:95, rate:0.6, speed:105, melee:true, cleave:62, col:'#ffe27a', cape:'#f4f0e4', snd:'hero_celeste_atk',
@@ -282,8 +319,9 @@ function heroEffUnlock(def){
   return Math.max(12,Math.round(def.unlockWave*MAP.def.mods.heroWaveMul));
 }
 const ASC_MULT=1.8, ASC_CHANCE=0.03;
-function heroStat(def,lvl,asc){
-  const m=Math.pow(1.22,lvl-1)*(1+relicVal('grimoire'))*(asc?ASC_MULT:1);
+const DIV_MULT=1.9, DIV_CHANCE=0.018; // divine: the tier above legendary
+function heroStat(def,lvl,asc,divine){
+  const m=Math.pow(1.22,lvl-1)*(1+relicVal('grimoire'))*(asc?ASC_MULT:1)*(divine?DIV_MULT:1);
   let respawn=Math.max(8,15-0.2*(lvl-1));
   if(def.legendary)respawn=def.id==='aurelia'&&lvl>=def.passive.lvl?2:5;
   return {hp:def.hp*m,dmg:def.dmg*m,rate:def.rate,speed:def.speed,
@@ -321,6 +359,32 @@ const EVENT_CFG={
  wardenMinWave:9,
  wardenChance:(w,pity)=>Math.min(0.30,0.02+0.003*w+0.012*pity),
 };
+
+/* ============================================================
+   CALAMITIES — ultra-rare roaming horrors. Slay one: artifact.
+   ============================================================ */
+const CALAMITIES=[
+ {id:'colossus2', name:'The Ashen Colossus', hp:5200, speed:30, armor:0.45, gold:400, leak:5, kind:'big',   col:'#e05a3a', size:30, event:'calamity', art:'crown'},
+ {id:'voidmaw',   name:'Voidmaw',            hp:3400, speed:55, armor:0.2,  gold:400, leak:5, kind:'beast', col:'#8a2adf', size:26, event:'calamity', art:'sigil'},
+ {id:'palerider', name:'The Pale Rider',     hp:4200, speed:42, armor:0.3,  gold:400, leak:5, kind:'ghost', col:'#dfe6e8', size:26, event:'calamity', art:'aegis'},
+];
+const CALAMITY_BY={};CALAMITIES.forEach(c=>CALAMITY_BY[c.id]=c);
+const CALAMITY_CHANCE=0.02, CALAMITY_MIN_WAVE=2;
+const ARTIFACTS=[
+ {id:'crown', name:'Crown of Embers',    icon:'👑', max:3, per:0.10, desc:'All towers +10% damage per tier.'},
+ {id:'sigil', name:'Worldbreaker Sigil', icon:'🔨', max:3, per:0.12, desc:'All heroes +12% damage per tier.'},
+ {id:'aegis', name:'Aegis of Dawn',      icon:'🛡', max:3, per:3,    desc:'+3 max lives per tier; walls slowly rebuild themselves.'},
+];
+const ARTIFACT_BY={};ARTIFACTS.forEach(a=>ARTIFACT_BY[a.id]=a);
+function artVal(id){return (typeof G!=='undefined'&&G&&G.artifacts&&G.artifacts[id])||0;}
+
+/* hero gear — ultra-rare drops from elite/champion kills */
+const GEAR_W=[null,{name:'Honed Blade',mul:0.12},{name:'Runed Blade',mul:0.24},{name:'Dragonfang',mul:0.40}];
+const GEAR_A=[null,{name:'Chainmail',mul:0.15},{name:'Warded Plate',mul:0.30},{name:'Aegis Plate',mul:0.50}];
+const GEAR_CHANCE=0.007;
+
+/* frontier expansions — buy a bigger battlefield mid-run */
+const EXPANSIONS=[{cost:100000,dx:8,dy:4},{cost:500000,dx:8,dy:5}];
 
 /* ============================================================
    THE VAULT — permanent progress that survives every defeat
@@ -406,7 +470,7 @@ const goldMul=w=>(1+0.06*w+0.0008*w*w)*(MAP?MAP.def.mods.gold:1)*(1+relicVal('tr
 const waveReward=w=>Math.round((60+14*w+(w%10===0?150+8*w:0))*(1+relicVal('treasury'))*(MAP?0.85+0.15*MAP.P.length:1));
 const speedMul=w=>Math.min(1.25,1+0.003*w)*(MAP?MAP.def.mods.spd:1);
 const popCap=w=>Math.min(55,8+Math.floor(w/3)+Math.floor(w/10)*5)+Math.round(relicVal('banners'));
-const maxLives=()=>CFG.START_LIVES+Math.round(relicVal('walls'));
+const maxLives=()=>CFG.START_LIVES+Math.round(relicVal('walls'))+ARTIFACT_BY.aegis.per*artVal('aegis');
 const WALL_BASE_HP=520;
 const wallHpAt=(w,lvl)=>Math.round(WALL_BASE_HP*Math.sqrt(hpMul(w))*Math.pow(1.8,lvl-1));
 const wallUpCost=lvl=>Math.round(160*Math.pow(1.7,lvl-1));

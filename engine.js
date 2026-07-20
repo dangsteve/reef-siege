@@ -8,6 +8,10 @@ let G=null;
 
 function newGame(mapId){
   const mdef=MAP_BY[mapId]||MAPS[0];
+  CFG.COLS=CFG.BASE_COLS;CFG.ROWS=CFG.BASE_ROWS;
+  CFG.W=CFG.COLS*CFG.CELL;CFG.H=CFG.ROWS*CFG.CELL;
+  try{if(typeof canvas!=='undefined'&&canvas&&canvas.width!==CFG.W){canvas.width=CFG.W;canvas.height=CFG.H;}}catch(err){}
+  try{if(typeof clearRenderCaches==='function')clearRenderCaches();}catch(err){}
   initMapRuntime(mdef);
   G={
     mapId:mdef.id,
@@ -15,7 +19,8 @@ function newGame(mapId){
     over:false, paused:false, speed:1, autoWave:true,
     towers:[], walls:[], enemies:[], troops:[], projs:[], parts:[], texts:[], fx:[],
     undo:[], chest:null,
-    troopLvl:{}, desired:{},
+    troopLvl:{}, desired:{}, troopTier:{},
+    artifacts:{}, expLvl:0, blitz:0,
     heroes:[], selHero:null,
     relics:{},
     spells:{firestorm:8,blessing:8,ragnarok:240},
@@ -26,7 +31,7 @@ function newGame(mapId){
     kills:0, bossKills:0, goldEarned:0, shake:0, streak:0, waveStartLives:CFG.START_LIVES,
     maintainT:0, auraT:0, targetMode:null,
   };
-  TROOPS.forEach(t=>{G.troopLvl[t.id]=0;G.desired[t.id]=0;});
+  TROOPS.forEach(t=>{G.troopLvl[t.id]=0;G.desired[t.id]=0;G.troopTier[t.id]=0;});
   RELICS.forEach(r=>G.relics[r.id]=0);
   G.desired.militia=2;
   initHeroes();
@@ -42,6 +47,7 @@ function freshHeroState(def){
   const st={id:def.id,hdef:def,isHero:true,lvl:1,recruited:def.cost===0&&!def.legendary,
     x:spot.x+idx*24-40,y:spot.y-52,homeX:spot.x+idx*24-40,homeY:spot.y-52,
     hp:def.hp,maxHp:def.hp,dead:false,respawnT:0,atkCd:0,skillCd:4,
+    gw:0,ga:0,bulwarkT:0,
     face:1,anim:0,swing:0,flash:0};
   return st;
 }
@@ -51,12 +57,20 @@ function heroUnlocked(h){
   return G.wave>=heroEffUnlock(h.hdef);
 }
 function activeHeroes(){return G.heroes.filter(h=>h.recruited&&!h.dead);}
+/* live stats: base × ascension × divine × gear × artifacts */
+function heroLiveStat(h){
+  const st=heroStat(h.hdef,h.lvl,h.asc,h.divine);
+  const gw=GEAR_W[h.gw||0],ga=GEAR_A[h.ga||0];
+  st.dmg*=(1+(gw?gw.mul:0))*(1+ARTIFACT_BY.sigil.per*artVal('sigil'));
+  st.hp*=(1+(ga?ga.mul:0));
+  return st;
+}
 function recruitHero(h){
   if(h.recruited||!heroUnlocked(h))return false;
   if(G.gold<h.hdef.cost)return false;
   G.gold-=h.hdef.cost;
   h.recruited=true;
-  const st=heroStat(h.hdef,h.lvl,h.asc);
+  const st=heroLiveStat(h);
   h.hp=st.hp;h.maxHp=st.hp;h.dead=false;
   const spot=posAt(0,MAP.P[0].total*0.55);
   h.x=spot.x+rnd(-40,40);h.y=spot.y-52;h.homeX=h.x;h.homeY=h.y;
@@ -81,7 +95,17 @@ function upgradeHeroU(h){
     G.shake=10;
     SFXp('horn_victory');
   }
-  const st=heroStat(h.hdef,h.lvl,h.asc);
+  /* 🔥 DIVINE: the tier above legendary — for legends and the ascended only */
+  if((h.hdef.legendary||h.asc)&&!h.divine&&Math.random()<DIV_CHANCE){
+    h.divine=true;
+    G.undo.length=0; // divinity is fate — not undoable
+    setBanner('🔥🔥 '+h.hdef.name+' has transcended mortality — DIVINE! 🔥🔥',true);
+    addFx({kind:'ring',x:h.x,y:h.y,r:10,maxR:190,life:1.0,col:'#ff5a4e'});
+    burst(h.x,h.y,50,'#ff7a5e');
+    G.shake=12;
+    SFXp('boss_roar');
+  }
+  const st=heroLiveStat(h);
   if(!h.dead){
     const pct=h.hp/h.maxHp;
     h.maxHp=st.hp;h.hp=st.hp*Math.max(pct,0.6);
@@ -269,6 +293,29 @@ function maintainArmy(dt){
 
 /* ================= BULK UPGRADES ================= */
 function upgradeTowerMax(t){let n=0;while(t.lvl<CFG.MAX_TOWER_LVL&&upgradeTower(t))n++;return n;}
+function promoteTower(t){
+  const def=TOWER_BY[t.id];
+  if(t.lvl<CFG.MAX_TOWER_LVL||(t.tier||1)>=3)return false;
+  const c=towerPromoCost(def,t.tier||1);
+  if(G.gold<c)return false;
+  G.gold-=c;t.tier=(t.tier||1)+1;
+  setBanner((t.tier===2?'⟡ ':'★ ')+def.name+' promoted to '+(t.tier===2?'SILVER':'GOLD')+' tier!',true);
+  burst(t.x,t.y,26,t.tier===2?'#c8ccd8':'#ffd75e');
+  addFx({kind:'ring',x:t.x,y:t.y,r:8,maxR:70,life:0.6,col:t.tier===2?'#c8ccd8':'#ffd75e'});
+  SFXp('horn_victory');
+  return true;
+}
+function promoteTroop(id){
+  const tier=G.troopTier[id]||0;
+  if(tier>=2||G.troopLvl[id]<CFG.MAX_TROOP_LVL)return false;
+  const c=troopPromoCost(id,tier+1);
+  if(G.gold<c)return false;
+  G.gold-=c;G.troopTier[id]=tier+1;
+  for(const tr of G.troops)if(tr.id===id){const st=troopStat(id,tr.lvl);tr.maxHp=st.hp;tr.hp=st.hp;}
+  setBanner((tier===0?'⟡ ':'★ ')+'Your '+TROOP_BY[id].name+'s reached '+TIER_NAMES[tier+1].trim()+' rank!',true);
+  SFXp('horn_victory');
+  return true;
+}
 function bulkUpgrade(kind){
   let spent=0,guard=0;
   while(guard++<400){
@@ -381,7 +428,13 @@ function spellAt(id,x,y){
 /* ================= RANDOM EVENTS ================= */
 function injectEvents(){
   const w=G.wave,q=G.spawnQueue;
-  if(w%10===0)return; // boss waves stay pure
+  /* ☄️ calamity: vanishingly rare, can strike ANY wave — even boss waves */
+  if(w>=CALAMITY_MIN_WAVE&&Math.random()<CALAMITY_CHANCE){
+    const cal=pick(CALAMITIES);
+    const at=Math.floor(q.length*rnd(0.3,0.7));
+    q.splice(at,0,{calamityId:cal.id,delay:1.2,rarity:null,pi:Math.floor(Math.random()*MAP.P.length)});
+  }
+  if(w%10===0)return; // boss waves stay pure (calamities excepted)
   if(w>=EVENT_CFG.boarMinWave&&Math.random()<EVENT_CFG.boarChance){
     const at=Math.floor(q.length*rnd(0.15,0.6));
     q.splice(at,0,{eventId:'boar',delay:0.4,rarity:null,pi:Math.floor(Math.random()*MAP.P.length)});
@@ -398,6 +451,25 @@ function injectEvents(){
   }
 }
 function eventReward(e){
+  if(e.def.event==='calamity'){
+    const art=ARTIFACT_BY[e.def.art];
+    const cur=G.artifacts[art.id]||0;
+    if(cur<art.max){
+      G.artifacts[art.id]=cur+1;
+      if(art.id==='aegis')G.lives=Math.min(maxLives(),G.lives+ARTIFACT_BY.aegis.per);
+      if(art.id==='sigil')for(const h of G.heroes)if(h.recruited){const st=heroLiveStat(h);h.maxHp=st.hp;}
+      setBanner('🏆 '+art.name+' '+['','I','II','III'][cur+1]+' claimed! '+art.desc,true);
+    }else{
+      for(const s of SPELLS)G.spells[s.id]=Math.min(G.spells[s.id],1);
+      const g2=Math.round(600*goldMul(G.wave));
+      G.gold+=g2;G.goldEarned+=g2;
+      setBanner('🏆 '+e.def.name+' slain again — spells recharged, +'+g2+'g!',true);
+    }
+    G.bossKills++;
+    addFx({kind:'ring',x:e.x,y:e.y,r:12,maxR:140,life:0.8,col:'#ff5a4e'});
+    SFXp('horn_victory');
+    return;
+  }
   if(e.def.event==='boar'){
     const roll=Math.random();
     if(roll<0.5){
@@ -475,6 +547,7 @@ function startPeakRun(mapId){
   newGame(mapId);
   if(!pk)return;
   Object.assign(G.troopLvl,pk.troopLvl||{});
+  Object.assign(G.troopTier,pk.troopTier||{});
   Object.assign(G.relics,pk.relics||{});
   Object.assign(G.desired,pk.desired||{});
   G.lives=maxLives();
@@ -484,11 +557,75 @@ function startPeakRun(mapId){
     if(!h)continue;
     if(h.hdef.legendary&&!vaultHas(h.id))continue;
     h.recruited=true;h.lvl=hs.lvl||1;h.asc=!!hs.asc;
-    const st=heroStat(h.hdef,h.lvl,h.asc);
+    h.divine=!!hs.dv;h.gw=hs.gw||0;h.ga=hs.ga||0;
+    const st=heroLiveStat(h);
     h.hp=st.hp;h.maxHp=st.hp;
   }
   setBanner('⭐ Peak build restored — Wave '+pk.wave+' strength, from wave 1! ⭐',true);
   saveGame();
+}
+
+/* ================= FRONTIER EXPANSION ================= */
+function expandedPaths(mdef,lvl){
+  let paths=mdef.paths.map(p=>p.map(c=>c.slice()));
+  let rows=CFG.BASE_ROWS;
+  for(let L=0;L<lvl;L++){
+    const ex=EXPANSIONS[L];
+    rows+=ex.dy;
+    paths=paths.map((cells,pi)=>{
+      const shifted=cells.map(cell=>[cell[0]+ex.dx,cell[1]+ex.dy]);
+      const y0=shifted[0][1];
+      let rA=clamp(y0+((pi%2===0)?-(4+2*L):(4+2*L)),1,rows-2);
+      if(Math.abs(rA-y0)<2)rA=clamp(y0+3,1,rows-2);
+      const k=2+((pi*3+L*2)%(ex.dx-3));
+      return [[-1,rA],[k,rA],[k,y0]].concat(shifted);
+    });
+  }
+  return paths;
+}
+function applyExpansion(lvl,shiftEntities){
+  const ex=EXPANSIONS[lvl-1];
+  if(!ex)return;
+  const oldTotals=MAP.P.map(p=>p.total);
+  const px=ex.dx*CFG.CELL, py=ex.dy*CFG.CELL;
+  CFG.COLS+=ex.dx;CFG.ROWS+=ex.dy;
+  CFG.W=CFG.COLS*CFG.CELL;CFG.H=CFG.ROWS*CFG.CELL;
+  G.expLvl=lvl;
+  initMapRuntime(MAP.def,expandedPaths(MAP.def,lvl));
+  if(shiftEntities){
+    for(const t of G.towers){t.c+=ex.dx;t.r+=ex.dy;t.x+=px;t.y+=py;}
+    const delta=MAP.P.map((p,i)=>p.total-(oldTotals[i]||0));
+    for(const w of G.walls){
+      w.d+=delta[w.pi]||0;
+      const p=posAt(w.pi,w.d);w.x=p.x;w.y=p.y;w.ang=p.a;
+    }
+    G.rally=MAP.P.map((p,i)=>clamp((G.rally[i]!==undefined?G.rally[i]:p.total*0.5)+(delta[i]||0),40,p.total-60));
+    for(const tr of G.troops){
+      tr.d=clamp(tr.d+(delta[tr.pi]||0),10,MAP.P[tr.pi].total-14);
+      if(tr.holdD!==undefined)tr.holdD=clamp(tr.holdD+(delta[tr.pi]||0),20,MAP.P[tr.pi].total-40);
+      const p=posAt(tr.pi,tr.d);tr.x=p.x;tr.y=p.y;
+      tr.foe=null;
+    }
+    for(const h of G.heroes){h.x+=px;h.y+=py;h.homeX+=px;h.homeY+=py;}
+    for(const z of G.zones){z.x+=px;z.y+=py;}
+    if(G.chest){G.chest.x+=px;G.chest.y+=py;}
+    G.projs.length=0;G.fx.length=0;G.parts.length=0;G.texts.length=0;
+    G.enemies.length=0;G.spawnQueue.length=0;
+  }
+  try{if(typeof canvas!=='undefined'&&canvas){canvas.width=CFG.W;canvas.height=CFG.H;}}catch(err){}
+  try{if(typeof clearRenderCaches==='function')clearRenderCaches();}catch(err){}
+}
+function expandMap(){
+  const lvl=G.expLvl||0;
+  if(lvl>=EXPANSIONS.length||G.waveActive||G.over)return false;
+  const ex=EXPANSIONS[lvl];
+  if(G.gold<ex.cost)return false;
+  G.gold-=ex.cost;
+  applyExpansion(lvl+1,true);
+  setBanner('🗺 THE FRONTIER EXPANDS — new lands, longer roads, more room to build!',true);
+  SFXp('horn_victory');
+  saveGame();
+  return true;
 }
 
 /* ================= WAVES ================= */
@@ -573,6 +710,7 @@ function startWave(bonus){
 function endWave(){
   if(G.over)return;
   G.waveActive=false;
+  if(G.blitz>0){G.blitz--;if(G.blitz===0)setBanner('⏩ Blitz complete — back to real time!',true);}
   const reward=waveReward(G.wave);
   G.gold+=reward;G.goldEarned+=reward;
   addText(CFG.W/2,120,'Wave '+G.wave+' cleared!  +'+reward+'g','#ffd75e');
@@ -612,8 +750,9 @@ function endWave(){
       v.peaks[G.mapId]={
         wave:cleared,
         budget:Math.max(MAP.def.mods.startGold||CFG.START_GOLD,Math.round(invested*0.6+G.gold*0.4)),
-        heroes:G.heroes.filter(h=>h.recruited).map(h=>({id:h.id,lvl:h.lvl,asc:!!h.asc})),
+        heroes:G.heroes.filter(h=>h.recruited).map(h=>({id:h.id,lvl:h.lvl,asc:!!h.asc,dv:!!h.divine,gw:h.gw||0,ga:h.ga||0})),
         troopLvl:Object.assign({},G.troopLvl),
+        troopTier:Object.assign({},G.troopTier),
         relics:Object.assign({},G.relics),
         desired:Object.assign({},G.desired),
       };
@@ -629,9 +768,10 @@ function spawnEnemy(entry){
   const w=G.wave;
   let def,tier=1,boss=false;
   if(entry.boss){def=entry.boss;tier=entry.tier;boss=true;}
+  else if(entry.calamityId)def=CALAMITY_BY[entry.calamityId];
   else if(entry.eventId)def=EVENT_DEFS[entry.eventId];
   else def=ENEMY_BY[entry.type];
-  const hm=hpMul(w)*(boss?Math.pow(2.1,tier-1)*(w===10?0.85:1):1)*(def.event==='boar'?3.2:1)*(def.event==='warden'?0.9:1);
+  const hm=hpMul(w)*(boss?Math.pow(2.1,tier-1)*(w===10?0.85:1):1)*(def.event==='boar'?3.2:1)*(def.event==='warden'?0.9:1)*(def.event==='calamity'?(2.2+w*0.03):1);
   let hp=def.hp*hm, gold=Math.round(def.gold*goldMul(w)), size=def.size, leak=def.leak, rarity=entry.rarity;
   let spd=def.speed*speedMul(w)*rnd(0.92,1.08);
   if(rarity==='elite'){hp*=2.6;gold=Math.round(gold*3);size*=1.18;spd*=1.05;}
@@ -646,6 +786,7 @@ function spawnEnemy(entry){
     captive:entry.captive||null,
   });
   if(boss)G.shake=Math.max(G.shake,8);
+  if(def.event==='calamity'){setBanner(THEME.txt.calamitySpawn(def.name),true);SFXp('boss_roar');G.shake=Math.max(G.shake,10);}
   if(def.event==='boar'){setBanner(THEME.txt.boarSpawn);SFXp('chest');}
   if(def.event==='warden'){setBanner(THEME.txt.wardenSpawn(HERO_BY[entry.captive].name),true);SFXp('boss_roar');}
 }
@@ -675,6 +816,23 @@ function killEnemy(e){
   addFx({kind:'die',x:e.x,y:e.y,life:0.5,col:e.def.col,size:e.size});
   addFx({kind:'coinfly',x:e.x,y:e.y,life:0.7,t:0});
   if(e.def.event){eventReward(e);}
+  /* 🗡 ultra-rare gear finds from elites & champions */
+  if(e.rarity&&!e.def.event&&Math.random()<GEAR_CHANCE*(e.rarity==='champ'?2:1)){
+    const hs2=G.heroes.filter(h=>h.recruited);
+    if(hs2.length){
+      const h2=pick(hs2);
+      const slot=Math.random()<0.5?'gw':'ga';
+      const arr=slot==='gw'?GEAR_W:GEAR_A;
+      const cur=h2[slot]||0;
+      if(cur<arr.length-1){
+        h2[slot]=cur+1;
+        const gr=arr[cur+1];
+        setBanner((slot==='gw'?'⚔ ':'🛡 ')+h2.hdef.name+' found '+gr.name+'! (+'+Math.round(gr.mul*100)+'% '+(slot==='gw'?'damage':'health')+')',true);
+        const st2=heroLiveStat(h2);h2.maxHp=st2.hp;if(!h2.dead)h2.hp=Math.min(st2.hp,h2.hp+st2.hp*0.2);
+        SFXp('chest');
+      }
+    }
+  }
   /* the Lich harvests souls */
   if(!e.boss&&!e.def.event){
     const lich=G.heroes.find(h=>h.id==='lich'&&h.recruited&&!h.dead);
@@ -695,12 +853,13 @@ function killEnemy(e){
 }
 function leakEnemy(e){
   e.dead=true;
-  if(e.def.event){
+  if(e.def.event&&e.def.event!=='calamity'){
     setBanner(e.def.event==='warden'
       ?THEME.txt.wardenEscape(e.captive&&HERO_BY[e.captive]?HERO_BY[e.captive].name:'its captive')
       :THEME.txt.boarEscape);
     return;
   }
+  if(e.def.event==='calamity')setBanner('☄️ '+e.def.name+' rampaged through your gate! −'+e.leak+' ❤',true);
   G.lives-=e.leak;
   G.shake=Math.max(G.shake,e.leak>=3?10:4);
   addFx({kind:'ring',x:e.x,y:e.y,r:8,maxR:60,life:0.5,col:'#ff5a5a'});
@@ -729,8 +888,10 @@ function damageAlly(t,dmg){
     return;
   }
   if(t.isHero){
+    if(t.bulwarkT>0)dmg*=0.35;
     if(t.hdef.passive&&t.lvl>=t.hdef.passive.lvl){
       if(t.hdef.id==='bjorn')dmg*=0.7;
+      if(t.hdef.id==='garrick')dmg*=0.6;
       if(t.hdef.id==='nyx'&&Math.random()<0.25){addText(t.x,t.y-20,'dodge','#c88bff',0.7);return;}
     }
   }else{
@@ -797,7 +958,7 @@ function towerFire(t,st,def){
   else tgt=inRange.reduce((a,b)=>(MAP.P[a.pi].total-a.d)<(MAP.P[b.pi].total-b.d)?a:b); // closest to the gate
 
   t.ang=Math.atan2(tgt.y-t.y,tgt.x-t.x);
-  const dmg=st.dmg*t.auraMul*(1+relicVal('engineering'))*(1+towerRank(t)*0.03);
+  const dmg=st.dmg*t.auraMul*(1+relicVal('engineering'))*(1+towerRank(t)*0.03)*towerTierMul(t)*(1+ARTIFACT_BY.crown.per*artVal('crown'));
   switch(def.id){
     case 'archer':
       for(let i=0;i<st.multishot;i++){
@@ -862,7 +1023,7 @@ function towerFire(t,st,def){
 
 /* ================= HERO SKILLS ================= */
 function castHeroSkill(h){
-  const def=h.hdef,st=heroStat(def,h.lvl);
+  const def=h.hdef,st=heroLiveStat(h);
   const sk=def.skill;
   switch(sk.id){
     case 'slam':{
@@ -953,6 +1114,32 @@ function castHeroSkill(h){
       const np=nearestPathPoint(h.x,h.y);
       for(let i=0;i<5;i++)spawnSkeletonAt(np.pi,clamp(np.d+rnd(-60,60),20,MAP.P[np.pi].total-30));
       G.shake=Math.max(G.shake,4);
+      break;}
+    case 'tempest':{
+      const cand=G.enemies.filter(e=>!e.dead&&dist2(h.x,h.y,e.x,e.y)<340*340)
+        .sort((a,b)=>b.hp-a.hp).slice(0,12);
+      if(cand.length<3)return false;
+      let prev={x:h.x,y:h.y-20};
+      for(const e of cand){
+        damageEnemy(e,st.dmg*2.4,'magic');
+        addFx({kind:'zap',pts:[{x:prev.x,y:prev.y},{x:e.x,y:e.y}],life:0.22});
+        if(!e.dead){e.slowT=Math.max(e.slowT,1);e.slowP=Math.max(e.slowP,0.3);}
+        prev=e;
+      }
+      G.shake=Math.max(G.shake,6);
+      break;}
+    case 'bulwark':{
+      let n=0;
+      for(const e of G.enemies)if(!e.dead&&!e.def.fly&&dist2(h.x,h.y,e.x,e.y)<170*170)n++;
+      if(n<2)return false;
+      h.bulwarkT=5;
+      h.hp=Math.min(h.maxHp,h.hp+h.maxHp*0.35);
+      for(const e of G.enemies){
+        if(e.dead||e.def.fly)continue;
+        if(dist2(h.x,h.y,e.x,e.y)<170*170&&!e.blk)e.blk=h;
+      }
+      addFx({kind:'ring',x:h.x,y:h.y,r:12,maxR:170,life:0.6,col:'#d8b45a'});
+      G.shake=Math.max(G.shake,5);
       break;}
     case 'shadowflurry':{
       const cand=G.enemies.filter(e=>!e.dead&&dist2(h.x,h.y,e.x,e.y)<220*220)
@@ -1065,7 +1252,10 @@ function subStep(dt){
   }
 
   maintainArmy(dt);
-  for(const w of G.walls)if(w.flash>0)w.flash-=dt;
+  for(const w of G.walls){
+    if(w.flash>0)w.flash-=dt;
+    if(w.hp<w.maxHp&&artVal('aegis')>0)w.hp=Math.min(w.maxHp,w.hp+w.maxHp*0.008*artVal('aegis')*dt);
+  }
   G.walls=G.walls.filter(w=>w.hp>0);
   if(G.chest){
     G.chest.t-=dt;
@@ -1091,12 +1281,32 @@ function subStep(dt){
   for(const t of G.towers){
     const def=TOWER_BY[t.id];
     if(t.heat>0)t.heat-=dt;
+    if(def.spawnTroop){
+      t.tick+=dt;
+      if(t.tick>=def.spawnCd/(1+0.1*(t.lvl-1))){
+        t.tick=0;
+        const cap=def.spawnN+((t.tier||1)-1);
+        const alive=G.troops.filter(u=>u.srcT===t).length;
+        if(alive<cap){
+          const np=nearestPathPoint(t.x,t.y);
+          const d=clamp(np.d+rnd(-30,30),20,MAP.P[np.pi].total-40);
+          const lvl=(t.lvl-1)*2+((t.tier||1)-1)*3;
+          const st=troopStat(def.spawnTroop,lvl);
+          G.troops.push({id:def.spawnTroop,lvl,pi:np.pi,d,lane:rnd(-15,15),x:t.x,y:t.y,
+            hp:st.hp,maxHp:st.hp,atkCd:rnd(0,0.4),foe:null,state:'walk',anim:rnd(0,6),face:-1,
+            healCd:0,swing:0,flash:0,decay:30,holdD:d,srcT:t});
+          burst(t.x,t.y-10,8,def.hue);
+          SFXp('recruit');
+        }
+      }
+      continue;
+    }
     if(def.id==='mint'){
       t.tick+=dt;
       if(t.tick>=5){
         t.tick=0;
         const st=towerStat(def,t.lvl);
-        const inc=Math.round(st.income*(1+relicVal('treasury')));
+        const inc=Math.round(st.income*(1+relicVal('treasury'))*towerTierMul(t));
         G.gold+=inc;G.goldEarned+=inc;
         addText(t.x,t.y-30,'+'+inc+'g','#ffd75e',1);
         burst(t.x,t.y-20,4,'#ffd75e');
@@ -1108,6 +1318,7 @@ function subStep(dt){
     t.cd-=dt;
     if(t.cd<=0){
       const st=towerStat(def,t.lvl);
+      st.range*=1+0.08*((t.tier||1)-1);
       if(towerFire(t,st,def))t.cd=1/st.rate;
       else t.cd=0.08;
     }
@@ -1179,6 +1390,18 @@ function subStep(dt){
           damageEnemy(p.tgt,p.dmg,p.dtype,{pierceArmor:p.pierceArmor});
           if(p.burn&&!p.tgt.dead){p.tgt.burnT=2.5;p.tgt.burnDps=Math.max(p.tgt.burnDps,p.burn);}
           if(p.slowHit&&!p.tgt.dead&&!p.tgt.boss){p.tgt.slowT=Math.max(p.tgt.slowT,1.5);p.tgt.slowP=Math.max(p.tgt.slowP,p.slowHit);}
+          if(p.arc){
+            let nb=null,bd2=1e9;
+            for(const e of G.enemies){
+              if(e.dead||e===p.tgt)continue;
+              const q2=dist2(p.tgt.x,p.tgt.y,e.x,e.y);
+              if(q2<140*140&&q2<bd2){bd2=q2;nb=e;}
+            }
+            if(nb){
+              damageEnemy(nb,p.dmg*0.6,'magic');
+              addFx({kind:'zap',pts:[{x:p.tgt.x,y:p.tgt.y},{x:nb.x,y:nb.y}],life:0.18});
+            }
+          }
         }
       }else{p.x+=dx/L*p.spd*dt;p.y+=dy/L*p.spd*dt;p.ang=Math.atan2(dy,dx);}
     }
@@ -1366,7 +1589,7 @@ function subStep(dt){
         tr.face=dir>0?1:-1;
       }
     }else{
-      const target=G.rally[tr.pi];
+      const target=tr.holdD!==undefined?tr.holdD:G.rally[tr.pi];
       const diff=target-tr.d;
       if(Math.abs(diff)>8){
         tr.state='walk';
@@ -1389,7 +1612,7 @@ function subStep(dt){
     if(h.dead){
       h.respawnT-=dt;
       if(h.respawnT<=0){
-        const st=heroStat(def,h.lvl,h.asc);
+        const st=heroLiveStat(h);
         h.dead=false;h.hp=st.hp;h.maxHp=st.hp;
         h.x=h.homeX;h.y=h.homeY;
         burst(h.x,h.y,16,def.col);
@@ -1397,10 +1620,11 @@ function subStep(dt){
       }
       continue;
     }
-    const st=heroStat(def,h.lvl,h.asc);
+    const st=heroLiveStat(h);
     h.maxHp=st.hp;
     h.anim+=dt*2.2;
     if(h.flash>0)h.flash-=dt;
+    if(h.bulwarkT>0)h.bulwarkT-=dt;
     if(h.swing>0)h.swing-=dt;
     h.atkCd-=dt;h.skillCd-=dt;
     /* celeste passive-ish base heal + lvl8 aura */
@@ -1451,6 +1675,7 @@ function subStep(dt){
               dmg,dtype:def.dtype==='magic'?'magic':'phys',splash:def.splash||0,
               burn:(def.id==='magnus'&&hasPassive)?dmg*0.4:0,
               slowHit:(def.id==='morrigan'&&hasPassive)?0.25:0,
+              arc:(def.id==='seraphine'&&hasPassive)?1:0,
               col:def.col});
           }
           SFXp(def.snd);
@@ -1480,12 +1705,13 @@ function subStep(dt){
 function saveKey(){return 'rs2_save_'+G.mapId;}
 function saveGame(){
   try{
-    const s={v:3,mapId:G.mapId,gold:G.gold,lives:G.lives,wave:G.wave,
-      towers:G.towers.map(t=>({id:t.id,c:t.c,r:t.r,lvl:t.lvl,k:t.kills||0})),
+    const s={v:4,mapId:G.mapId,gold:G.gold,lives:G.lives,wave:G.wave,
+      towers:G.towers.map(t=>({id:t.id,c:t.c,r:t.r,lvl:t.lvl,k:t.kills||0,ti:t.tier||1})),
       walls:G.walls.map(w=>({pi:w.pi,d:Math.round(w.d),lvl:w.lvl})),
-      streak:G.streak,
+      streak:G.streak,expLvl:G.expLvl||0,
       troopLvl:G.troopLvl,desired:G.desired,rally:G.rally,
-      heroes:G.heroes.map(h=>({id:h.id,lvl:h.lvl,recruited:h.recruited,asc:!!h.asc})),
+      troopTier:G.troopTier,artifacts:G.artifacts,
+      heroes:G.heroes.map(h=>({id:h.id,lvl:h.lvl,recruited:h.recruited,asc:!!h.asc,dv:!!h.divine,gw:h.gw||0,ga:h.ga||0})),
       relics:G.relics,spun:G.spun,
       kills:G.kills,bossKills:G.bossKills,goldEarned:G.goldEarned,
       autoWave:G.autoWave,speed:G.speed};
@@ -1498,8 +1724,9 @@ function clearSave(){try{localStorage.removeItem(saveKey());}catch(err){}}
 function loadGame(mapId){
   try{
     const s=JSON.parse(localStorage.getItem('rs2_save_'+mapId));
-    if(!s||(s.v!==2&&s.v!==3)||!(s.lives>0))return false;
+    if(!s||(s.v!==2&&s.v!==3&&s.v!==4)||!(s.lives>0))return false;
     newGame(mapId);
+    for(let L=1;L<=(s.expLvl||0);L++)applyExpansion(L,false);
     G.gold=s.gold;G.lives=s.lives;G.wave=s.wave;
     G.kills=s.kills||0;G.bossKills=s.bossKills||0;G.goldEarned=s.goldEarned||0;
     G.autoWave=s.autoWave!==false;G.speed=s.speed||1;G.spun=!!s.spun;G.streak=s.streak||0;
@@ -1507,6 +1734,8 @@ function loadGame(mapId){
     Object.assign(G.troopLvl,s.troopLvl||{});
     Object.assign(G.desired,s.desired||{});
     Object.assign(G.relics,s.relics||{});
+    Object.assign(G.troopTier,s.troopTier||{});
+    Object.assign(G.artifacts,s.artifacts||{});
     if(s.v===2&&s.consum){ // old consumables converted to gold
       let refund=0;
       for(const id in s.consum){const d=CONSUM_BY[id];if(d)refund+=d.cost*(s.consum[id]||0);}
@@ -1515,14 +1744,15 @@ function loadGame(mapId){
     G.towers=[];
     for(const t of s.towers||[]){
       if(!TOWER_BY[t.id])continue;
-      G.towers.push({id:t.id,c:t.c,r:t.r,x:t.c*CFG.CELL+20,y:t.r*CFG.CELL+20,lvl:t.lvl,cd:0,ang:-Math.PI/2,auraMul:1,heat:0,tick:0,kills:t.k||0});
+      G.towers.push({id:t.id,c:t.c,r:t.r,x:t.c*CFG.CELL+20,y:t.r*CFG.CELL+20,lvl:t.lvl,cd:0,ang:-Math.PI/2,auraMul:1,heat:0,tick:0,kills:t.k||0,tier:t.ti||1});
     }
     for(const hs of s.heroes||[]){
       const h=G.heroes.find(x=>x.id===hs.id);
       if(!h)continue;
       h.lvl=hs.lvl||1;h.recruited=!!hs.recruited;h.asc=!!hs.asc;
+      h.divine=!!hs.dv;h.gw=hs.gw||0;h.ga=hs.ga||0;
       if(h.recruited&&h.hdef.legendary)vaultAddLegend(h.id); // heal the vault
-      const st=heroStat(h.hdef,h.lvl,h.asc);
+      const st=heroLiveStat(h);
       h.hp=st.hp;h.maxHp=st.hp;
     }
     for(const ws of s.walls||[]){

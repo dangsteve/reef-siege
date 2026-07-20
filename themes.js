@@ -27,6 +27,9 @@ castle:{
   mint:{name:'Gold Mint',desc:'Mints gold every 5s. Perfect while you multitask.'},
   beacon:{name:'Holy Beacon',desc:'+damage aura for towers in range. Stacks.'},
   arbalest:{name:'Great Arbalest',desc:'Slow-loading siege crossbow. Colossal bolts at extreme range; aims at flyers first.'},
+  barracks:{name:'Barracks',desc:'Garrisons footmen onto the nearest road. They fight until slain or spent.'},
+  lodge:{name:'Ranger Lodge',desc:'Fields rangers who pepper the road — and the sky — with arrows.'},
+  siegecamp:{name:'Siege Workshop',desc:'Assembles a lumbering war golem that cleaves whole packs.'},
   wall:{name:'Barricade',desc:'Blocks the road — enemies must batter it down. Build ON the path.'},
  },
  troops:{
@@ -42,7 +45,12 @@ castle:{
   cavalry:{name:'Cavalry',desc:'Fast riders that rush the front.'},
   paladin:{name:'Paladin',desc:'Armored, self-healing champion.'},
   giant:{name:'Giant',desc:'Colossal smasher. Cleaves groups.'},
+  templar:{name:'Templar',desc:'Holy bulwark. Heavy armor, mends his own wounds.'},
+  stormcaller:{name:'Stormcaller',desc:'Storm bolts crack over whole packs. Hits air.'},
   skeleton:{name:'Risen Skeleton',desc:'Raised from fallen foes. Fights until it crumbles.'},
+  footman:{name:'Footman',desc:'Garrison soldier from your Barracks.'},
+  ranger:{name:'Ranger',desc:'Garrison archer from your Ranger Lodge.'},
+  wargolem:{name:'War Golem',desc:'Siege construct from your Workshop.'},
  },
  heroes:{
   aldric:{name:'Sir Aldric',title:'Knight-Commander',col:'#7cc4ff',cape:'#c23a3a',
@@ -66,6 +74,12 @@ castle:{
   drake:{name:'Cindervane',title:'the Sky Drake',col:'#ff7a4e',cape:'#8a2a1a',
    skillName:'Sky Sweep',skillDesc:'Scours the heavens: massive damage to every flyer, embers rain below.',
    passiveName:'Windlord',passiveDesc:'Double damage against flying enemies.'},
+  seraphine:{name:'Seraphine Stormcrown',title:'Oracle of Tempests',col:'#8ad4ff',cape:'#2a4a7a',
+   skillName:'Tempest',skillDesc:'Calls a rolling thunderhead: chained lightning racks up to 12 foes.',
+   passiveName:'Static Veil',passiveDesc:'Her bolts arc to a second nearby target.'},
+  garrick:{name:'Garrick the Unbroken',title:'Shield of the Realm',col:'#d8b45a',cape:'#4a3f68',
+   skillName:'Bulwark',skillDesc:'Plants his shield: taunts nearby foes onto himself, heals and hardens for 5s.',
+   passiveName:'Living Fortress',passiveDesc:'Takes 40% less damage.'},
   aurelia:{name:'Aurelia the Dawnblade',title:'Legend of the First Light',col:'#ffe27a',cape:'#f4f0e4',
    skillName:'Dawnburst',skillDesc:'Radiant nova: heavy holy damage and heals nearby allies.',
    passiveName:'Undying Light',passiveDesc:'Returns from death almost instantly.'},
@@ -91,6 +105,14 @@ castle:{
   drake:{name:'Infernal Drake',desc:'Scorches nearby defenders.'},
  },
  events:{boar:'Gilded Boar',warden:'Shadow Warden'},
+ calamities:{
+  colossus2:{name:'The Ashen Colossus'},voidmaw:{name:'Voidmaw'},palerider:{name:'The Pale Rider'},
+ },
+ artifacts:{
+  crown:{name:'Crown of Embers',desc:'All towers +10% damage per tier.'},
+  sigil:{name:'Worldbreaker Sigil',desc:'All heroes +12% damage per tier.'},
+  aegis:{name:'Aegis of Dawn',desc:'+3 max lives per tier; walls slowly rebuild themselves.'},
+ },
  relics:{
   steel:{name:'Sharpened Steel'},engineering:{name:'Siege Engineering'},banners:{name:'War Banners'},
   treasury:{name:'Royal Treasury'},walls:{name:'Bastion Walls'},grimoire:{name:"Hero's Grimoire"},drums:{name:'Drums of War'},
@@ -114,6 +136,7 @@ castle:{
   ragnarok:'⚡ R A G N A R O K ⚡',
   welcome:w=>'Welcome back! Wave '+w+' approaches…',
   chest:'A supply cache appeared — click it before it vanishes!',
+  calamitySpawn:n=>'☄️ CALAMITY! '+n+' has come — slay it for a relic of power! ☄️',
   themeBtn:'🪸 Switch to Reef theme',
  },
 },
@@ -136,6 +159,9 @@ reef:{
   mint:{name:'Treasure Chest',desc:'Mints gold every 5s. Perfect while you multitask.'},
   beacon:{name:'Pearl Beacon',desc:'+damage aura for towers in range. Stacks.'},
   arbalest:{name:'Abyssal Arbalest',desc:'Slow-loading great harpoon-gun. Colossal shots at extreme range; aims at swimmers first.'},
+  barracks:{name:'Anemone Bunker',desc:'Garrisons crab guards onto the nearest current. They fight until slain or spent.'},
+  lodge:{name:'Archerfish School',desc:'Fields archerfish who pepper the current — and the waters above — with jets.'},
+  siegecamp:{name:'Whalebone Forge',desc:'Assembles a lumbering reef colossus that cleaves whole packs.'},
   wall:{name:'Coral Barricade',desc:'Blocks the current — enemies must batter it down. Build ON the path.'},
  },
  troops:{
@@ -151,7 +177,12 @@ reef:{
   cavalry:{name:'Seahorse Rider',desc:'Swift riders that rush the front.'},
   paladin:{name:'Turtle Paladin',desc:'Shelled, self-healing champion.'},
   giant:{name:'Colossal Crab',desc:'Titanic claws. Cleaves groups.'},
+  templar:{name:'Seahorse Lancer',desc:'Holy bulwark of the reef. Heavy armor, mends his own wounds.'},
+  stormcaller:{name:'Octomancer',desc:'Ink-storm bolts crack over whole packs. Hits swimmers above.'},
   skeleton:{name:'Drowned Bones',desc:'Raised from fallen foes. Fights until it crumbles.'},
+  footman:{name:'Crab Guard',desc:'Garrison soldier from your Anemone Bunker.'},
+  ranger:{name:'Archerfish',desc:'Garrison sharpshooter from your School.'},
+  wargolem:{name:'Reef Colossus',desc:'Living siege construct from your Forge.'},
  },
  heroes:{
   aldric:{name:'Porous Pete',title:'Fry-Cook of the Reef',col:'#f2d94e',cape:'#e86a3a',
@@ -175,6 +206,12 @@ reef:{
   drake:{name:'Tidewing',title:'the Storm Drake',col:'#4ecbe8',cape:'#1a4a5a',
    skillName:'Sky Sweep',skillDesc:'Scours the open water: massive damage to every swimmer above, scald rains below.',
    passiveName:'Currentlord',passiveDesc:'Double damage against free-swimmers.'},
+  seraphine:{name:'Maris Stormcrown',title:'Oracle of Currents',col:'#8ad4ff',cape:'#2a4a7a',
+   skillName:'Riptide Tempest',skillDesc:'Calls a rolling maelstrom: chained lightning racks up to 12 foes.',
+   passiveName:'Static Veil',passiveDesc:'Her bolts arc to a second nearby target.'},
+  garrick:{name:'Old Shellback',title:'Shield of the Reef',col:'#d8b45a',cape:'#4a3f68',
+   skillName:'Shell Wall',skillDesc:'Plants his great shell: taunts nearby foes onto himself, heals and hardens for 5s.',
+   passiveName:'Living Fortress',passiveDesc:'Takes 40% less damage.'},
   aurelia:{name:'King Neptune',title:'God-King of the Seven Seas',col:'#ffe27a',cape:'#f4f0e4',
    skillName:'Trident Radiance',skillDesc:'Trident nova: heavy divine damage and heals nearby allies.',
    passiveName:'Immortal Tide',passiveDesc:'Returns from death almost instantly.'},
@@ -201,6 +238,14 @@ reef:{
   drake:{name:'Magma Eel',desc:'Scalds nearby defenders.'},
  },
  events:{boar:'Golden Sea Turtle',warden:'Locker Warden'},
+ calamities:{
+  colossus2:{name:'The Kraken'},voidmaw:{name:'Abyss Leviathan'},palerider:{name:'The Drowned Admiral'},
+ },
+ artifacts:{
+  crown:{name:'Crown of Pearls',desc:'All towers +10% damage per tier.'},
+  sigil:{name:'Leviathan Sigil',desc:'All heroes +12% damage per tier.'},
+  aegis:{name:'Aegis of Tides',desc:'+3 max lives per tier; barricades slowly regrow themselves.'},
+ },
  relics:{
   steel:{name:'Sharpened Claws'},engineering:{name:'Reef Engineering'},banners:{name:'Kelp Banners'},
   treasury:{name:'Sunken Treasury'},walls:{name:'Coral Walls'},grimoire:{name:"Mariner's Grimoire"},drums:{name:'Drums of the Deep'},
@@ -224,6 +269,7 @@ reef:{
   ragnarok:'🌀 M A E L S T R O M 🌀',
   welcome:w=>'Welcome back to the reef! Wave '+w+' approaches…',
   chest:'A treasure chest washed up — click it before it sinks!',
+  calamitySpawn:n=>'☄️ CALAMITY! '+n+' rises from the deep — slay it for a relic of power! ☄️',
   themeBtn:'🏰 Switch to Castle theme',
  },
 },
@@ -244,6 +290,8 @@ function applyTheme(id){
   for(const e of ENEMIES){const n=P.enemies[e.id];if(n)e.name=n;}
   for(const b of BOSSES){const o=P.bosses[b.id];if(o){b.name=o.name;b.desc=o.desc;}}
   for(const k in EVENT_DEFS){const n=P.events[k];if(n)EVENT_DEFS[k].name=n;}
+  if(P.calamities)for(const c of CALAMITIES){const o=P.calamities[c.id];if(o)c.name=o.name;}
+  if(P.artifacts)for(const a of ARTIFACTS){const o=P.artifacts[a.id];if(o){a.name=o.name;a.desc=o.desc;}}
   for(const r of RELICS){const o=P.relics[r.id];if(o)r.name=o.name;}
   for(const s of SPELLS){const o=P.spells[s.id];if(o){s.name=o.name;s.desc=o.desc;}}
   for(const m of MAPS){const o=P.maps[m.id];if(o){m.name=o.name;m.desc=o.desc;}}

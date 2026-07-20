@@ -42,7 +42,6 @@ window.addEventListener('DOMContentLoaded',()=>{
   buildSideBars();
   buildSpellBar();
   bindHud();
-  bindConfirmBar();
   window.addEventListener('resize',updateSidebarsVisible);
   bindCanvas();
   bindKeys();
@@ -82,6 +81,13 @@ function frame(now){
   lastF=now;
   if(started&&G){
     stepSim(dt);
+    if(G.blitz>0&&!G.over&&!G.paused){
+      const t0=performance.now();
+      while(performance.now()-t0<12&&G.blitz>0&&!G.over){
+        if(!G.waveActive)startWave(0);
+        stepSim(1/30);
+      }
+    }
     drawFrame(ctx,UIS);
     refreshHud();
     try{
@@ -240,6 +246,13 @@ function bindHud(){
   bindMobilePanel();
   $('btnDock').onclick=()=>setDock($('dockbody').style.display==='none');
   $('btnRally').onclick=()=>{UIS.mode='rally';UIS.selTower=null;if(G)G.targetMode=null;setCursorHint('Click near a road to set that road’s rally point');};
+  const bz=$('btnBlitz');
+  if(bz)bz.onclick=()=>{
+    if(!G||G.over)return;
+    if(G.blitz>0){G.blitz=0;setBanner('⏩ Blitz cancelled');}
+    else{G.blitz=10;G.paused=false;setBanner('⏩ BLITZ! Auto-fighting the next 10 waves at hyper speed…',true);}
+    SFXp('ui_click');
+  };
   const ub=$('btnUndo');
   if(ub)ub.onclick=()=>{
     if(!G||G.over)return;
@@ -328,6 +341,8 @@ function refreshHud(){
   $('btnAuto').classList.toggle('active',G.autoWave);
   $('btnAuto').textContent='AUTO'+(G.autoWave?' ✓':'');
   $('btnPause').textContent=G.paused?'▶':'⏸';
+  const bz2=$('btnBlitz');
+  if(bz2){bz2.classList.toggle('active',G.blitz>0);bz2.textContent=G.blitz>0?'⏩'+G.blitz:'⏩';}
   refreshSpellBar();
 }
 
@@ -340,7 +355,7 @@ function buildTowerCards(){
     d.className='card';
     d.id='tc-'+def.id;
     d.title=def.desc;
-    const chip=def.wall?'🧱 blocks road':def.targets?(def.targets==='both'?'⛰＋✈ air':'⛰ ground'):(def.id==='mint'?'🪙 income':'✨ support');
+    const chip=def.wall?'🧱 blocks road':def.spawnTroop?'🏕 garrison':def.targets?(def.targets==='both'?'⛰＋✈ air':'⛰ ground'):(def.id==='mint'?'🪙 income':'✨ support');
     d.innerHTML='<div class="card-icon" id="ti-'+def.id+'"></div>'+
       '<div class="card-name">'+def.name+'</div>'+
       '<div class="tgt-chip">'+chip+'</div>'+
@@ -358,9 +373,7 @@ function selectBuildType(def){
   UIS.pendC=-1;UIS.pendR=-1;
   if(G)G.targetMode=null;
   syncBuildSelection();
-  setCursorHint(def.wall?(IS_TOUCH?'Drag the '+def.name+' onto a road, then tap ✓':'Click a road tile to set the '+def.name+', then ✓ to build')
-    :IS_TOUCH?('Drag '+def.name+' where you want it, then tap ✓'):
-    ('Move the ghost with your mouse, click to set it down, then ✓ to build'));
+  setCursorHint(IS_TOUCH?'Tap twice to build':'Double-click to build');
   hideTowerDetail();
   SFXp('ui_click');
 }
@@ -471,17 +484,21 @@ function showTowerDetail(t){
   else if(t.kills)stats+='<span>'+t.kills+' kills</span>';
   const maxed=t.lvl>=CFG.MAX_TOWER_LVL;
   const upCost=maxed?0:towerUpCost(def,t.lvl);
-  box.innerHTML='<div class="td-head">'+def.name+' <span class="lvl-badge">Lv '+t.lvl+(maxed?' MAX':'')+'</span>'+
+  const tierTag=(t.tier||1)>1?(t.tier===2?' <span class="lvl-badge" style="color:#c8ccd8">⟡ SILVER</span>':' <span class="lvl-badge">★ GOLD</span>'):'';
+  box.innerHTML='<div class="td-head">'+def.name+' <span class="lvl-badge">Lv '+t.lvl+(maxed?' MAX':'')+'</span>'+tierTag+
     '<button class="x-btn" id="btnTdClose">✕</button></div>'+
     '<div class="td-stats">'+stats+'</div>'+
     '<div class="btn-row">'+
     (maxed?'':'<button class="small-btn gold" id="btnUp">⬆ '+fmt(upCost)+'g</button>'+
       '<button class="small-btn gold" id="btnUpMax" title="Buy every affordable upgrade level at once">⏫ Max</button>')+
+    (maxed&&(t.tier||1)<3?'<button class="small-btn gold" id="btnPromo" title="Permanent tier promotion: +40% damage and +8% range per tier">'+((t.tier||1)===1?'⟡ Silver ':'★ Gold ')+fmt(towerPromoCost(def,t.tier||1))+'g</button>':'')+
     '<button class="small-btn danger" id="btnSell">Sell +'+fmt(Math.round(towerInvested(def,t.lvl)*0.7))+'g</button>'+
     '</div>';
   box.style.display='block';
   if(!maxed)$('btnUp').onclick=()=>{if(upgradeTower(t)){showTowerDetail(t);positionTowerDetail(t);}};
   if(!maxed)$('btnUpMax').onclick=()=>{if(upgradeTowerMax(t)>0){showTowerDetail(t);positionTowerDetail(t);refreshCards();}};
+  const pb2=$('btnPromo');
+  if(pb2)pb2.onclick=()=>{if(promoteTower(t)){showTowerDetail(t);positionTowerDetail(t);refreshCards();}};
   $('btnSell').onclick=()=>{sellTower(t);hideTowerDetail();UIS.selTower=null;};
   $('btnTdClose').onclick=()=>{hideTowerDetail();UIS.selTower=null;};
 }
@@ -598,7 +615,11 @@ function buildArmyCards(){
     $('inc-'+def.id).onclick=()=>{G.desired[def.id]=Math.min(24,G.desired[def.id]+1);refreshCards();SFXp('ui_click');};
     $('dec-'+def.id).onclick=()=>{G.desired[def.id]=Math.max(0,G.desired[def.id]-1);refreshCards();SFXp('ui_click');};
     $('sum-'+def.id).onclick=()=>{summonTroop(def.id,false);refreshCards();};
-    $('upt-'+def.id).onclick=()=>{upgradeTroopType(def.id);refreshCards();};
+    $('upt-'+def.id).onclick=()=>{
+      if(G.troopLvl[def.id]>=CFG.MAX_TROOP_LVL)promoteTroop(def.id);
+      else upgradeTroopType(def.id);
+      refreshCards();
+    };
   }
   setTimeout(()=>{
     for(const def of TROOPS)if(!def.summon)iconHtmlInto($('ai-'+def.id),'troop',def.id,36,'⚔️');
@@ -641,7 +662,7 @@ function refreshHeroCards(){
       continue;
     }
     lock.style.display='none';
-    $('hl-'+def.id).textContent='Lv '+h.lvl+(h.asc?' ✨':'');
+    $('hl-'+def.id).textContent='Lv '+h.lvl+(h.divine?' 🔥':h.asc?' ✨':'');
     const card=$('hc-'+def.id);
     if(card&&h.asc&&!card.dataset.asc){
       card.dataset.asc='1';
@@ -649,8 +670,17 @@ function refreshHeroCards(){
       const ht=card.querySelector('.hero-title');
       if(ht)ht.textContent='✨ Ascended — '+def.title;
     }
-    const st=heroStat(def,h.lvl,h.asc);
-    $('hs-'+def.id).textContent='⚔ '+fmt(st.dmg)+' • ❤ '+fmt(st.hp);
+    if(card){
+      card.classList.toggle('divine',!!h.divine);
+      if(h.divine&&!card.dataset.dv){
+        card.dataset.dv='1';
+        const ht2=card.querySelector('.hero-title');
+        if(ht2)ht2.textContent='🔥 DIVINE — '+def.title;
+      }
+    }
+    const st=heroLiveStat(h);
+    $('hs-'+def.id).textContent='⚔ '+fmt(st.dmg)+' • ❤ '+fmt(st.hp)
+      +(h.gw?' • 🗡'+['','I','II','III'][h.gw]:'')+(h.ga?' • 🛡'+['','I','II','III'][h.ga]:'');
     const hpF=$('hhp-'+def.id);
     hpF.style.width=(h.recruited?clamp(h.hp/h.maxHp,0,1)*100:0)+'%';
     hpF.style.background=def.col;
@@ -706,6 +736,29 @@ function buildRelicCards(){
     box.appendChild(d);
     $('rb-'+def.id).onclick=()=>{if(buyRelic(def.id))refreshCards();};
   }
+  /* 🗺 frontier expansion */
+  const fr=document.createElement('div');
+  fr.className='card relic-card';fr.id='rc-frontier';
+  fr.innerHTML='<div class="card-icon">🗺</div>'+
+    '<div class="card-name">Frontier</div>'+
+    '<div class="tier-pips" id="rp-frontier"></div>'+
+    '<div class="troop-stats rdesc">Buy new lands between waves: the world zooms out, roads lengthen, build room grows.</div>'+
+    '<button class="small-btn gold" id="rb-frontier"></button>';
+  box.appendChild(fr);
+  $('rb-frontier').onclick=()=>{if(expandMap())refreshCards();};
+  /* ☄️ calamity artifacts */
+  for(const a of ARTIFACTS){
+    const d2=document.createElement('div');
+    d2.className='card relic-card art-card';
+    d2.id='art-'+a.id;
+    d2.title=a.desc;
+    d2.innerHTML='<div class="card-icon">'+a.icon+'</div>'+
+      '<div class="card-name">'+a.name+'</div>'+
+      '<div class="tier-pips" id="ap-'+a.id+'"></div>'+
+      '<div class="troop-stats rdesc">'+a.desc+'</div>'+
+      '<div class="art-note" id="an-'+a.id+'"></div>';
+    box.appendChild(d2);
+  }
   const note=document.createElement('div');
   note.className='card relic-card spell-note';
   note.innerHTML='<div class="card-icon">⚡</div>'+
@@ -731,6 +784,29 @@ function refreshRelicCards(){
       b.disabled=G.gold<c;
     }
   }
+  const fb=$('rb-frontier');
+  if(fb){
+    const lvl2=G.expLvl||0;
+    const pips2=$('rp-frontier');
+    if(pips2){let s2='';for(let i=0;i<EXPANSIONS.length;i++)s2+='<span class="pip'+(i<lvl2?' on':'')+'"></span>';pips2.innerHTML=s2;}
+    if(lvl2>=EXPANSIONS.length){fb.textContent='MAX SIZE';fb.disabled=true;}
+    else{
+      fb.textContent='Expand '+fmt(EXPANSIONS[lvl2].cost)+'g';
+      fb.disabled=G.gold<EXPANSIONS[lvl2].cost||G.waveActive;
+      fb.title=G.waveActive?'Only between waves':'Zoom the world out with longer roads and more build room';
+    }
+  }
+  for(const a of ARTIFACTS){
+    const tier2=(G.artifacts&&G.artifacts[a.id])||0;
+    const ap=$('ap-'+a.id);
+    if(!ap)continue;
+    let s3='';for(let i=0;i<a.max;i++)s3+='<span class="pip'+(i<tier2?' on':'')+'"></span>';
+    ap.innerHTML=s3;
+    const an=$('an-'+a.id);
+    if(an)an.textContent=tier2>0?'Tier '+['','I','II','III'][tier2]+' — trophy of '+a.name:'☄️ Slay its Calamity bearer to claim it';
+    const el2=$('art-'+a.id);
+    if(el2)el2.classList.toggle('owned',tier2>0);
+  }
 }
 
 function refreshCards(){
@@ -752,9 +828,27 @@ function refreshCards(){
     $('as-'+def.id).textContent=(def.heal?('💚 '+fmt(st.heal)+'/s'):('⚔ '+fmt(st.dmg)+' ❤ '+fmt(st.hp)))+' • '+st.cost+'g';
     $('sum-'+def.id).disabled=G.gold<st.cost||popCount()>=popCap(G.wave);
     const maxed=lvl>=CFG.MAX_TROOP_LVL;
+    const tier=G.troopTier[def.id]||0;
     const uc=maxed?0:troopUpCost(def.id,lvl);
-    $('upt-'+def.id).textContent=maxed?'MAX':'⬆'+fmt(uc);
-    $('upt-'+def.id).disabled=maxed||G.gold<uc;
+    const upB=$('upt-'+def.id);
+    if(maxed&&tier<2){
+      const pc=troopPromoCost(def.id,tier+1);
+      upB.textContent=(tier===0?'⟡':'★')+fmt(pc);
+      upB.title='Promote to '+TIER_NAMES[tier+1].trim()+' rank — permanent +55% stats';
+      upB.disabled=G.gold<pc;
+    }else{
+      upB.textContent=maxed?'MAX':'⬆'+fmt(uc);
+      upB.title='';
+      upB.disabled=maxed||G.gold<uc;
+    }
+    const cardT=$('ac-'+def.id);
+    if(cardT){
+      cardT.classList.toggle('tier-silver',tier===1);
+      cardT.classList.toggle('tier-gold',tier===2);
+      const nameEl=cardT.querySelector('.card-name');
+      if(nameEl&&nameEl.childNodes.length&&nameEl.childNodes[0].nodeType===3)
+        nameEl.childNodes[0].nodeValue=TIER_NAMES[tier]+def.name+' ';
+    }
   }
   refreshHeroCards();
   refreshRelicCards();
@@ -782,7 +876,7 @@ const WHEEL_SLICES=[
    const h=hs.length?hs[0]:null;
    if(!h){G.gold+=250;return '+250 gold!';}
    h.lvl=Math.min(CFG.MAX_HERO_LVL,h.lvl+2);
-   const st=heroStat(h.hdef,h.lvl,h.asc);h.maxHp=st.hp;h.hp=st.hp;
+   const st=heroLiveStat(h);h.maxHp=st.hp;h.hp=st.hp;
    return h.hdef.name+' +2 levels!';}},
  {label:'400g',col:'#41639a',w:12,apply(){G.gold+=400;return '+400 gold!';}},
  {label:'Relic +1',col:'#b06a3a',w:9,apply(){
@@ -798,7 +892,7 @@ const WHEEL_SLICES=[
    TROOPS.forEach(t=>{if(G.troopLvl[t.id]<CFG.MAX_TROOP_LVL)G.troopLvl[t.id]++;});
    for(const h of G.heroes)if(h.recruited){
      h.lvl=Math.min(CFG.MAX_HERO_LVL,h.lvl+1);
-     const st=heroStat(h.hdef,h.lvl,h.asc);h.maxHp=st.hp;h.hp=st.hp;
+     const st=heroLiveStat(h);h.maxHp=st.hp;h.hp=st.hp;
    }
    RELICS.forEach(r=>{if(G.relics[r.id]<r.max)G.relics[r.id]++;});
    G.lives=maxLives();
@@ -901,39 +995,12 @@ function setPending(cc,rr2){
   if(UIS.mode!=='build')return;
   UIS.pendC=cc;UIS.pendR=rr2;
   UIS.hoverC=cc;UIS.hoverR=rr2;
-  positionConfirmBar();
 }
 function clearPending(){
   UIS.pendC=-1;UIS.pendR=-1;
-  $('confirmBar').style.display='none';
+  const cb=$('confirmBar');if(cb)cb.style.display='none';
 }
-function positionConfirmBar(){
-  if(UIS.pendC<0){$('confirmBar').style.display='none';return;}
-  const bar=$('confirmBar');
-  bar.style.display='flex';
-  const ok=(UIS.buildType==='wall'
-    ?canPlaceWall(UIS.pendC*CFG.CELL+20,UIS.pendR*CFG.CELL+20)
-    :canPlace(UIS.pendC,UIS.pendR))&&G.gold>=TOWER_BY[UIS.buildType].cost;
-  $('cbOk').disabled=!ok;
-  const p=stagePos(UIS.pendC*CFG.CELL+20,UIS.pendR*CFG.CELL-30);
-  const sr=$('stage').getBoundingClientRect();
-  const bw=bar.offsetWidth||110,bh=bar.offsetHeight||44;
-  let left=p.x-bw/2,top=p.y-bh;
-  if(top<6)top=stagePos(UIS.pendC*CFG.CELL+20,(UIS.pendR+1)*CFG.CELL+16).y;
-  bar.style.left=clamp(left,6,sr.width-bw-6)+'px';
-  bar.style.top=clamp(top,6,sr.height-bh-6)+'px';
-}
-function bindConfirmBar(){
-  $('cbOk').onclick=()=>{
-    if(UIS.pendC<0)return;
-    if(placeTower(UIS.buildType,UIS.pendC,UIS.pendR)){
-      clearPending();
-      if(G.gold<TOWER_BY[UIS.buildType].cost)cancelMode();
-      else setCursorHint(IS_TOUCH?'Drag or tap to position the next one — ✕ to stop':'Click to position the next one — ✕ or Esc to stop');
-    }
-  };
-  $('cbNo').onclick=()=>{cancelMode();};
-}
+/* (confirm bar removed — placement is now double-click / double-tap) */
 
 /* ================= canvas input ================= */
 function canvasPos(ev){
@@ -961,10 +1028,21 @@ function bindCanvas(){
     }
     if(G.chest&&collectChest(p.x,p.y)){refreshCards();return;}
     if(UIS.mode==='build'){
-      /* set (or move) the ghost; ✓/✗ buttons confirm */
-      setPending(c,r);
-      if(UIS.buildType==='wall')setCursorHint(canPlaceWall(p.x,p.y)?'':'Walls go ON a road — with room from the gate, spawn and other walls');
-      else setCursorHint(canPlace(c,r)?'':'Blocked tile — pick an open one');
+      /* first click/tap positions the ghost; same tile again builds it */
+      if(UIS.justPlacedGhost){UIS.justPlacedGhost=false;return;}
+      if(UIS.pendC===c&&UIS.pendR===r){
+        if(placeTower(UIS.buildType,c,r)){
+          clearPending();
+          setCursorHint('');
+          if(G.gold<TOWER_BY[UIS.buildType].cost)cancelMode();
+        }else{
+          setCursorHint(UIS.buildType==='wall'?'Walls go ON a road — clear of the gate, spawn and other walls':'Blocked tile — pick an open one');
+        }
+      }else{
+        setPending(c,r);
+        const ok2=UIS.buildType==='wall'?canPlaceWall(c*CFG.CELL+20,r*CFG.CELL+20):canPlace(c,r);
+        setCursorHint(ok2?(IS_TOUCH?'Tap again to build':'Click again to build'):(UIS.buildType==='wall'?'Move it onto a road':'Blocked tile'));
+      }
       return;
     }
     if(UIS.mode==='hero'&&G.selHero){moveHeroTo(G.selHero,p.x,p.y);UIS.mode='none';setCursorHint('');return;}
@@ -994,16 +1072,18 @@ function bindCanvas(){
     if(UIS.mode!=='build')return;
     const p=canvasPos(ev);
     if(p.x<0||p.y<0||p.x>CFG.W||p.y>CFG.H)return;
+    const c=clamp(Math.floor(p.x/CFG.CELL),0,CFG.COLS-1),r=clamp(Math.floor(p.y/CFG.CELL),0,CFG.ROWS-1);
     UIS.dragPlace=true;
-    setPending(Math.floor(p.x/CFG.CELL),Math.floor(p.y/CFG.CELL));
+    if(UIS.pendC!==c||UIS.pendR!==r){setPending(c,r);UIS.justPlacedGhost=true;}
   },{passive:true});
   canvas.addEventListener('pointermove',ev=>{
     if(!UIS.dragPlace)return;
     const p=canvasPos(ev);
-    setPending(clamp(Math.floor(p.x/CFG.CELL),0,CFG.COLS-1),clamp(Math.floor(p.y/CFG.CELL),0,CFG.ROWS-1));
+    const c=clamp(Math.floor(p.x/CFG.CELL),0,CFG.COLS-1),r=clamp(Math.floor(p.y/CFG.CELL),0,CFG.ROWS-1);
+    if(c!==UIS.pendC||r!==UIS.pendR){setPending(c,r);UIS.justPlacedGhost=true;}
   },{passive:true});
   window.addEventListener('pointerup',()=>{
-    if(UIS.dragPlace){UIS.dragPlace=false;positionConfirmBar();}
+    if(UIS.dragPlace)UIS.dragPlace=false;
   },{passive:true});
   canvas.addEventListener('contextmenu',ev=>{
     ev.preventDefault();

@@ -305,6 +305,14 @@
     #spellbar{bottom:44px;right:8px;gap:7px;}
   }
   .bulk-btn{flex:0 0 auto;align-self:center;line-height:1.15;padding:6px 8px;font-size:11px;}
+  .card.tier-silver{border-color:#c8ccd8;box-shadow:0 0 10px rgba(200,204,216,0.35);}
+  .card.tier-gold{border-color:#ffd75e;box-shadow:0 0 12px rgba(255,215,94,0.45);}
+  .hero-card.divine{border-color:#ff5a4e!important;box-shadow:0 0 16px rgba(255,90,70,0.55)!important;
+    background:linear-gradient(180deg,#4a2028,#2e1418)!important;}
+  .hero-card.divine .card-name{color:#ffb0a0;}
+  .art-card{opacity:0.72;}
+  .art-card.owned{opacity:1;border-color:#ff8a5e;box-shadow:0 0 10px rgba(255,138,94,0.35);}
+  .art-note{font-size:9px;color:#c8a888;}
   /* ============ REEF THEME CHROME ============ */
   body.reef{background:#081a22;}
   body.reef #hudbar{background:linear-gradient(180deg,#0f3242,#0a2430);border-bottom-color:#1e5a66;}
@@ -370,6 +378,7 @@
     <button class="hud-btn" id="spdCycle" title="Game speed — tap to cycle">1×</button>
     <button class="hud-btn" id="btnPause" title="Pause (Space)">⏸</button>
     <button class="hud-btn" id="btnUndo" title="Undo last build / upgrade (full refund)">↩</button>
+    <button class="hud-btn" id="btnBlitz" title="Blitz — auto-fight the next 10 waves at hyper speed (tap again to cancel)">⏩</button>
     <button class="hud-btn" id="btnSfx" title="Sound effects">🔊</button>
     <button class="hud-btn" id="btnMusic" title="Music">🎵</button>
     <button class="hud-btn" id="btnHelp" title="How to play">?</button>
@@ -380,10 +389,6 @@
     <div id="cursorHint"></div>
     <div id="towerDetail"></div>
     <div id="spellbar"></div>
-    <div id="confirmBar">
-      <button id="cbOk">✓</button>
-      <button id="cbNo">✕</button>
-    </div>
     <div id="sideL"></div>
     <div id="sideR"></div>
   </div>
@@ -436,7 +441,10 @@
     <ul>
       <li>11 types, 5 upgrade levels each. Armored foes shrug off arrows — melt them with magic (❄🔥⚡☠).</li>
       <li><b>Barricades</b> are built ON the road — enemies must batter them down before they can pass. The <b>Arbalest</b> is a slow, monstrous sniper that prioritizes flyers.</li>
-      <li>↩ undoes your last build or upgrade at full refund. ⏫ Max on a tower — or the ⏫ All button in each panel — buys upgrades in bulk.</li>
+      <li><b>Double-click</b> (or double-tap) to build: first click aims the ghost, second click builds it.</li>
+      <li>↩ undoes your last build or upgrade at full refund. ⏫ Max on a tower — or the ⏫ All button in each panel — buys upgrades in bulk. ⏩ blitzes the next 10 waves at hyper speed.</li>
+      <li>Maxed towers and troops can be <b>promoted</b>: ⟡ Silver, then ★ Gold — big permanent power. Heroes can rarely <b>✨ Ascend</b> when trained; legends and the ascended can even go <b>🔥 DIVINE</b>.</li>
+      <li>☄️ <b>Calamities</b> are ultra-rare wandering horrors — slay one for an artifact trophy. Elites sometimes drop hero <b>gear</b>. The 🗺 <b>Frontier</b> (Relics panel) buys a bigger battlefield.</li>
       <li><b>Gold Mint</b> = passive income; <b>Holy Beacon</b> buffs nearby towers. Click a built tower to upgrade or sell.</li>
     </ul>
     <h3>⚔️ Army</h3>
