@@ -305,6 +305,18 @@
     #spellbar{bottom:44px;right:8px;gap:7px;}
   }
   .bulk-btn{flex:0 0 auto;align-self:center;line-height:1.15;padding:6px 8px;font-size:11px;}
+  .prem-tab{color:#ffd75e;}
+  .prem-build{font-size:9.5px;color:#c8a888;margin:2px 0;}
+  .prem-card{position:relative;overflow:hidden;}
+  .prem-card.prem-legendary{border-color:#ffb454;box-shadow:0 0 10px rgba(255,180,84,0.3);}
+  .prem-card.prem-supreme{border-color:#ff5a8a;box-shadow:0 0 10px rgba(255,90,138,0.32);}
+  .prem-card.prem-divine{border-color:#8ad4ff;box-shadow:0 0 14px rgba(138,212,255,0.4);
+    background:linear-gradient(180deg,#2a2450,#1c1838);}
+  .prem-card.selected{outline:2px solid #ffd75e;}
+  .prem-card.cant{opacity:0.55;}
+  body.sidebars #spellbar .spell-btn{width:44px;height:44px;}
+  body.sidebars #spellbar .spell-btn.ult{width:50px;height:50px;}
+  body.sidebars #spellbar{gap:5px;max-height:82vh;flex-wrap:wrap;}
   .card.tier-silver{border-color:#c8ccd8;box-shadow:0 0 10px rgba(200,204,216,0.35);}
   .card.tier-gold{border-color:#ffd75e;box-shadow:0 0 12px rgba(255,215,94,0.45);}
   .hero-card.divine{border-color:#ff5a4e!important;box-shadow:0 0 16px rgba(255,90,70,0.55)!important;
@@ -369,6 +381,7 @@
     <span class="stat"><span class="ico">🪙</span><span id="stGold">0</span></span>
     <span class="stat"><span class="ico">🌊</span><span id="stWave">1</span></span>
     <span class="stat" title="Army size / cap"><span class="ico">⚔️</span><span id="stPop">0/8</span></span>
+    <span class="stat" id="stBuildWrap" title="Free Master Builders" style="display:none"><span class="ico">🔨</span><span id="stBuild">0</span></span>
     <div class="hud-spacer"></div>
     <button class="hud-btn" id="btnWave">Start Wave</button>
     <button class="hud-btn" id="btnAuto" title="Auto-start waves">AUTO ✓</button>
@@ -395,6 +408,7 @@
   <div id="dock">
     <div id="dockbar">
       <div class="tab active" id="tab-towers">🏰 Towers</div>
+      <div class="tab prem-tab" id="tab-premium" style="display:none">⭐ Premium</div>
       <div class="tab" id="tab-army">⚔️ Army</div>
       <div class="tab" id="tab-heroes">🦸 Heroes</div>
       <div class="tab" id="tab-relics">💎 Relics</div>
@@ -403,6 +417,7 @@
     </div>
     <div id="dockbody">
       <div class="pane" id="pane-towers" style="display:flex"><button class="small-btn gold bulk-btn" id="bulk-towers" title="Repeatedly buys the cheapest tower or wall upgrade on the field until gold runs out">⏫<br>All</button><div class="pane" style="display:contents" id="towerCards"></div></div>
+      <div class="pane" id="pane-premium" style="display:none"><div style="display:contents" id="premiumCards"></div></div>
       <div class="pane" id="pane-army"><button class="small-btn gold bulk-btn" id="bulk-troops" title="Repeatedly buys the cheapest troop upgrade until gold runs out">⏫<br>All</button><div style="display:contents" id="armyCards"></div></div>
       <div class="pane" id="pane-heroes"><button class="small-btn gold bulk-btn" id="bulk-heroes" title="Repeatedly trains the cheapest hero level until gold runs out">⏫<br>All</button><div style="display:contents" id="heroCards"></div></div>
       <div class="pane" id="pane-relics"><div style="display:contents" id="relicCards"></div></div>
@@ -411,6 +426,8 @@
 </div>
 <div id="mobilePanel">
   <div id="mpHead">
+    <button class="mp-tab" data-mp="towers">🏰 Towers</button>
+    <button class="mp-tab" data-mp="premium" id="mpPremTab" style="display:none">⭐ Premium</button>
     <button class="mp-tab" data-mp="army">⚔️ Army</button>
     <button class="mp-tab" data-mp="heroes">🦸 Heroes</button>
     <button class="mp-tab" data-mp="relics">💎 Relics</button>
@@ -445,6 +462,8 @@
       <li>↩ undoes your last build or upgrade at full refund. ⏫ Max on a tower — or the ⏫ All button in each panel — buys upgrades in bulk. ⏩ blitzes the next 10 waves at hyper speed.</li>
       <li>Maxed towers and troops can be <b>promoted</b>: ⟡ Silver, then ★ Gold — big permanent power. Heroes can rarely <b>✨ Ascend</b> when trained; legends and the ascended can even go <b>🔥 DIVINE</b>.</li>
       <li>☄️ <b>Calamities</b> are ultra-rare wandering horrors — slay one for an artifact trophy. Elites sometimes drop hero <b>gear</b>. The 🗺 <b>Frontier</b> (Relics panel) buys a bigger battlefield.</li>
+      <li>🔨 <b>Master Builders</b> rarely arrive after a wave and unlock the ⭐ <b>Premium</b> tab: legendary/supreme/divine towers that take many waves to raise — a healer, a random-calamity mage, a machine-gun ballista, a darkness chain, and the <b>Aeon Monolith</b> that becomes a new random power every wave.</li>
+      <li>Six spells now: Firestorm, Sanctified Ground, ❄ Frost Nova, ⚡ Chain Lightning, ⚔ War Cry and RAGNAROK. The rare <b>✨ Blessing of the Gods</b> grants a second, mightier wheel spin.</li>
       <li><b>Gold Mint</b> = passive income; <b>Holy Beacon</b> buffs nearby towers. Click a built tower to upgrade or sell.</li>
     </ul>
     <h3>⚔️ Army</h3>

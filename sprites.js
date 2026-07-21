@@ -1404,6 +1404,11 @@ const SpriteLib = (function () {
     return { c: c2, px: t.px * s, py: t.py * s };
   }
   const TURRET_PAINT = { archer: turretArcher, cannon: turretCannon, ballista: turretBallista, arbalest: turretArbalest };
+  /* premium towers reuse existing bases; render.js layers their flourishes on top */
+  ['pHeal','pStorm','pGat','pShadow','pGod'].forEach(id=>{ if(TOWER_IDS.indexOf(id)<0)TOWER_IDS.push(id); });
+  TOWER_PAINT.pHeal=tBeacon; TOWER_PAINT.pStorm=tStorm; TOWER_PAINT.pGat=tBallista; TOWER_PAINT.pShadow=tStorm; TOWER_PAINT.pGod=tBeacon;
+  TURRET_PAINT.pGat=turretBallista;
+  Object.assign(TOWER_HUE,{pHeal:'#54e0a0',pStorm:'#c060ff',pGat:'#ff5a3a',pShadow:'#8a3adf',pGod:'#ffd75e'});
 
   function renderTower(id, lvl) {
     const c = cv(96, 122), g = c.getContext('2d');
@@ -2019,6 +2024,19 @@ const SpriteLib = (function () {
       g.beginPath(); g.arc(18.6, 12, 1.4, 0, Math.PI * 2); g.arc(25.4, 12, 1.4, 0, Math.PI * 2); g.fill();
     },
   };
+  ICON_PAINT.troop.thrall = function (g) { // enthralled foe — green sigil
+    splash(g, '#5a8a4a');
+    g.fillStyle = '#2a3a22'; g.beginPath(); g.arc(22, 20, 9, 0, 7); g.fill(); outl(g, 2);
+    g.fillStyle = '#9ae05e'; g.beginPath(); g.arc(18, 19, 2, 0, 7); g.arc(26, 19, 2, 0, 7); g.fill();
+    g.strokeStyle = '#9ae05e'; g.lineWidth = 2; g.beginPath(); g.arc(22, 30, 6, 0.2, Math.PI - 0.2); g.stroke();
+  };
+  ICON_PAINT.troop.aeonchamp = function (g) { // radiant champion
+    splash(g, '#c88b6a');
+    glow(g, 22, 20, 12, '#ffb0a0', 0.5);
+    g.fillStyle = '#e8d0b0'; g.beginPath(); g.arc(22, 18, 9, 0, 7); g.fill(); outl(g, 2.2);
+    g.fillStyle = '#ffd75e'; poly(g, [[14, 12], [18, 4], [22, 11], [26, 4], [30, 12]]); g.fill(); outl(g, 1.6);
+    g.fillStyle = '#2a2036'; g.beginPath(); g.arc(19, 18, 1.8, 0, 7); g.arc(25, 18, 1.8, 0, 7); g.fill();
+  };
   ICON_PAINT.troop.templar = function (g) { // kite shield with gold cross
     splash(g, '#e8ce6a');
     g.fillStyle = '#f0e6c8';
@@ -2329,6 +2347,34 @@ const SpriteLib = (function () {
       g.lineTo(15, 21.5); g.arcTo(12, 21.5, 12, 18, 3.5); g.arcTo(12, 14.5, 15, 14.5, 3.5); g.closePath();
       g.stroke();
       shine(g, 20, 11, 2.4, 1.6, -0.5, 0.55);
+    },
+    frost: function (g) { // frost nova spell
+      glow(g, 22, 22, 15, '#8ad4ff', 0.5);
+      g.strokeStyle = '#e6f6ff'; g.lineWidth = 3; g.lineCap = 'round';
+      for (let k = 0; k < 6; k++) {
+        g.save(); g.translate(22, 22); g.rotate(k * Math.PI / 3);
+        g.beginPath(); g.moveTo(0, 0); g.lineTo(0, -15);
+        g.moveTo(0, -7); g.lineTo(-4, -11); g.moveTo(0, -7); g.lineTo(4, -11);
+        g.moveTo(0, -12); g.lineTo(-3, -15); g.moveTo(0, -12); g.lineTo(3, -15);
+        g.stroke(); g.restore();
+      }
+      g.fillStyle = '#bfe8ff'; g.beginPath(); g.arc(22, 22, 3, 0, 7); g.fill();
+    },
+    bolt: function (g) { // chain lightning spell
+      glow(g, 22, 22, 15, '#8ad4ff', 0.5);
+      poly(g, [[26, 4], [12, 24], [20, 24], [16, 40], [32, 18], [23, 18]]);
+      g.fillStyle = '#ffe86a'; g.fill(); outl(g, 2.4);
+      poly(g, [[24.5, 8], [16, 22.5], [21, 22.5], [18.5, 33]]);
+      g.fillStyle = '#fff4c0'; g.fill();
+    },
+    warcry: function (g) { // war cry / rally banner
+      g.strokeStyle = OUT; g.lineWidth = 3; g.beginPath(); g.moveTo(13, 6); g.lineTo(13, 40); g.stroke();
+      g.strokeStyle = '#8a6a42'; g.lineWidth = 1.6; g.stroke();
+      g.fillStyle = '#d83a3a';
+      g.beginPath(); g.moveTo(13, 7); g.lineTo(35, 11); g.lineTo(29, 17); g.lineTo(35, 23); g.lineTo(13, 27); g.closePath();
+      g.fill(); outl(g, 2.2);
+      g.fillStyle = '#ffd75e'; g.beginPath(); g.arc(20, 17, 3, 0, 7); g.fill();
+      g.beginPath(); g.arc(13, 5, 2.4, 0, 7); g.fillStyle = '#e8c34a'; g.fill();
     },
     ragnarok: function (g) { // ultimate: storm-wreathed rune bolt
       glow(g, 22, 22, 18, '#8ad0ff', 0.55);

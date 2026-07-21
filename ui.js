@@ -39,6 +39,7 @@ window.addEventListener('DOMContentLoaded',()=>{
   try{if(typeof SpriteLib!=='undefined')SpriteLib.build();}catch(err){console.warn('SpriteLib.build failed',err);}
   if(IS_TOUCH){document.body.classList.add('touch');LOW_FX=true;}
   buildTowerCards();
+  buildPremiumCards();
   buildSideBars();
   buildSpellBar();
   bindHud();
@@ -176,7 +177,7 @@ function showMapSelect(){
     applyThemeChrome();
     try{if(typeof SpriteLib!=='undefined')SpriteLib.build();}catch(err){}
     buildTowerCards();buildSideBars();buildSpellBar();
-    if(G){buildArmyCards();buildHeroCards();buildRelicCards();refreshCards();}
+    if(G){buildArmyCards();buildHeroCards();buildRelicCards();buildPremiumCards();refreshCards();}
     showMapSelect();
     SFXp('ui_click');
   };
@@ -188,7 +189,7 @@ function beginRun(mapId,cont,peak){
   else if(!cont||!loadGame(mapId))newGame(mapId);
   started=true;
   UIS.mode='none';UIS.selTower=null;UIS.selWall=null;
-  buildArmyCards();buildHeroCards();buildRelicCards();refreshCards();
+  buildArmyCards();buildHeroCards();buildRelicCards();buildPremiumCards();refreshCards();
   hideTowerDetail();setCursorHint('');
   closeMobilePanel();
   SFXp('horn_wave');
@@ -240,8 +241,8 @@ function bindHud(){
     }
   };
   $('btnAuto').onclick=()=>{if(G)G.autoWave=!G.autoWave;};
-  for(const t of ['towers','army','heroes','relics']){
-    $('tab-'+t).onclick=()=>{setDock(true);switchTab(t);};
+  for(const t of ['towers','premium','army','heroes','relics']){
+    const tb=$('tab-'+t);if(tb)tb.onclick=()=>{setDock(true);switchTab(t);};
   }
   bindMobilePanel();
   $('btnDock').onclick=()=>setDock($('dockbody').style.display==='none');
@@ -271,7 +272,7 @@ function bindHud(){
 }
 function switchTab(t){
   UIS.tab=t;
-  for(const x of ['towers','army','heroes','relics']){
+  for(const x of ['towers','premium','army','heroes','relics']){
     const tb=$('tab-'+x);
     if(tb)tb.classList.toggle('active',x===t);
     $('pane-'+x).style.display=x===t?'flex':'none';
@@ -326,6 +327,8 @@ function refreshHud(){
   $('stWave').textContent=G.wave+(G.streak>1?' 🔥'+G.streak:'');
   const skel=G.troops.length-popCount();
   $('stPop').textContent=popCount()+'/'+popCap(G.wave)+(skel>0?' +'+skel+'💀':'');
+  const bstat=$('stBuildWrap');
+  if(bstat){bstat.style.display=G.builderSeen?'inline-flex':'none';$('stBuild').textContent=G.builders||0;}
   const btn=$('btnWave');
   if(G.waveActive){
     btn.textContent='⚔ '+(G.spawnQueue.length+G.enemies.length)+' foes';
@@ -367,6 +370,47 @@ function buildTowerCards(){
     for(const def of TOWERS)iconHtmlInto($('ti-'+def.id),'tower',def.id,36,'🏰');
   },0);
 }
+function buildPremiumCards(){
+  const box=$('premiumCards');
+  if(!box)return;
+  box.innerHTML='';
+  const tierCol={legendary:'#ffb454',supreme:'#ff5a8a',divine:'#8ad4ff'};
+  for(const def of PREM_TOWERS){
+    const d=document.createElement('div');
+    d.className='card prem-card prem-'+def.prem;
+    d.id='pc-'+def.id;
+    d.title=def.desc;
+    d.innerHTML='<div class="card-icon" id="pi-'+def.id+'"></div>'+
+      '<div class="card-name">'+def.name+'</div>'+
+      '<div class="tgt-chip" style="color:'+tierCol[def.prem]+'">✦ '+def.tierName+'</div>'+
+      '<div class="prem-build">🔨 '+def.buildWaves+' waves</div>'+
+      '<div class="card-cost">'+fmt(def.cost)+'g</div>';
+    d.onclick=()=>{
+      if(!G)return;
+      if(G.builders<1){setBanner('You need a free 🔨 Master Builder to raise a Premium Tower.');SFXp('ui_click');return;}
+      selectBuildType(def);
+    };
+    box.appendChild(d);
+  }
+  setTimeout(()=>{for(const def of PREM_TOWERS)iconHtmlInto($('pi-'+def.id),'tower',def.id,36,'✦');},0);
+}
+function refreshPremiumCards(){
+  if(!G)return;
+  const tab=$('tab-premium');
+  if(tab)tab.style.display=G.builderSeen?'':'none';
+  const mtab=$('mpPremTab');
+  if(mtab)mtab.style.display=G.builderSeen?'':'none';
+  const bstat=$('stBuildWrap');
+  if(bstat){bstat.style.display=G.builderSeen?'inline-flex':'none';const bn=$('stBuild');if(bn)bn.textContent=G.builders||0;}
+  const box=$('premiumCards');
+  if(!box)return;
+  const free=G.builders||0;
+  for(const def of PREM_TOWERS){
+    const el=$('pc-'+def.id);
+    if(!el)continue;
+    el.classList.toggle('cant',free<1||G.gold<def.cost);
+  }
+}
 function selectBuildType(def){
   if(UIS.mode==='build'&&UIS.buildType===def.id){cancelMode();return;}
   UIS.mode='build';UIS.buildType=def.id;UIS.selTower=null;UIS.tapArmed=false;
@@ -381,6 +425,7 @@ function syncBuildSelection(){
   const on=UIS.mode==='build';
   document.querySelectorAll('#towerCards .card').forEach(x=>x.classList.toggle('selected',on&&x.id==='tc-'+UIS.buildType));
   document.querySelectorAll('#sideL .side-card').forEach(x=>x.classList.toggle('selected',on&&x.dataset.tid===UIS.buildType));
+  document.querySelectorAll('#premiumCards .card').forEach(x=>x.classList.toggle('selected',on&&x.id==='pc-'+UIS.buildType));
 }
 
 /* ================= letterbox side strips (phones) ================= */
@@ -464,7 +509,21 @@ function cancelMode(){
 }
 function showTowerDetail(t){
   UIS.selTower=t;
-  const def=TOWER_BY[t.id],st=towerStat(def,t.lvl);
+  const def=TOWER_BY[t.id];
+  if(t.building){
+    const box=$('towerDetail');
+    const done=t.buildTotal-t.buildLeft;
+    box.innerHTML='<div class="td-head">🔨 '+def.name+' <span class="lvl-badge">building</span>'+
+      '<button class="x-btn" id="btnTdClose">✕</button></div>'+
+      '<div class="td-stats"><span>'+done+' / '+t.buildTotal+' waves raised</span><span>'+t.buildLeft+' to go</span></div>'+
+      '<div class="btn-row"><button class="small-btn danger" id="btnScrap">Scrap (refund builder + '+fmt(Math.round(def.cost*0.5))+'g)</button></div>';
+    box.style.display='block';
+    $('btnScrap').onclick=()=>{G.gold+=Math.round(def.cost*0.5);G.builders++;G.towers=G.towers.filter(x=>x!==t);hideTowerDetail();UIS.selTower=null;refreshCards();SFXp('sell');};
+    $('btnTdClose').onclick=()=>{hideTowerDetail();UIS.selTower=null;};
+    positionTowerDetail(t);
+    return;
+  }
+  const st=towerStat(def,t.lvl);
   const box=$('towerDetail');
   let stats='';
   const dmul=t.auraMul*(1+relicVal('engineering'));
@@ -479,6 +538,10 @@ function showTowerDetail(t){
   if(st.pierce)stats+='<span>➤ '+st.pierce+'</span>';
   if(st.income)stats+='<span>🪙 +'+st.income+'g/5s</span>';
   if(st.aura)stats+='<span>✨ +'+Math.round(st.aura*100)+'%</span>';
+  if(def.prem){stats+='<span style="color:#ffb454">✦ '+def.tierName+'</span>';}
+  if(t.id==='pHeal')stats+='<span>💚 '+fmt(premHealAmt(t))+'/0.55s aura</span>';
+  if(t.id==='pStorm')stats+='<span>🌩 random calamities</span>';
+  if(t.id==='pGod'){const gm=GOD_BY[t.godMode];stats+='<span>🎲 this wave: '+(gm?gm.ico+' '+gm.name:'—')+'</span>';}
   const stars=towerRank(t);
   if(stars>0)stats+='<span>★'.repeat(1)+stars+' veteran +'+(stars*3)+'% ⚔ ('+(t.kills||0)+' kills)</span>';
   else if(t.kills)stats+='<span>'+t.kills+' kills</span>';
@@ -609,6 +672,7 @@ function buildArmyCards(){
       '<div class="btn-row tight">'+
       '<button class="small-btn" id="sum-'+def.id+'">+1</button>'+
       '<button class="small-btn gold" id="upt-'+def.id+'">⬆</button>'+
+      '<button class="small-btn gold" id="mxt-'+def.id+'" title="Upgrade this troop to max level">⏫</button>'+
       '</div>'+
       '<div class="lock-cover" id="lk-'+def.id+'">🔒 W'+def.unlock+'</div>';
     box.appendChild(d);
@@ -618,6 +682,11 @@ function buildArmyCards(){
     $('upt-'+def.id).onclick=()=>{
       if(G.troopLvl[def.id]>=CFG.MAX_TROOP_LVL)promoteTroop(def.id);
       else upgradeTroopType(def.id);
+      refreshCards();
+    };
+    $('mxt-'+def.id).onclick=()=>{
+      let g=0;while(G.troopLvl[def.id]<CFG.MAX_TROOP_LVL&&upgradeTroopType(def.id))g++;
+      if(!g&&G.troopLvl[def.id]>=CFG.MAX_TROOP_LVL)promoteTroop(def.id);
       refreshCards();
     };
   }
@@ -706,8 +775,10 @@ function refreshHeroCards(){
       if(bb.dataset.sig!==sig){
         bb.dataset.sig=sig;
         bb.innerHTML='<button class="small-btn gold" data-tr="'+def.id+'">⬆ '+fmt(c)+'g</button>'+
+          '<button class="small-btn gold" data-mx="'+def.id+'" title="Train to max level">⏫</button>'+
           '<button class="small-btn" data-mv="'+def.id+'">🚶 Move</button>';
         bb.querySelector('[data-tr]').onclick=()=>{const hh=G.heroes.find(x=>x.id===def.id);if(upgradeHeroU(hh))refreshCards();};
+        bb.querySelector('[data-mx]').onclick=()=>{const hh=G.heroes.find(x=>x.id===def.id);let g=0;while(hh.lvl<CFG.MAX_HERO_LVL&&upgradeHeroU(hh))g++;if(g)refreshCards();};
         bb.querySelector('[data-mv]').onclick=()=>{
           G.selHero=h;UIS.mode='hero';G.targetMode=null;
           setCursorHint('Click the map to post '+def.name+' there');
@@ -852,6 +923,7 @@ function refreshCards(){
   }
   refreshHeroCards();
   refreshRelicCards();
+  refreshPremiumCards();
   refreshSideBars();
   updateSidebarsVisible();
   if(UIS.selWall&&!G.walls.includes(UIS.selWall)){UIS.selWall=null;hideTowerDetail();}
@@ -860,9 +932,20 @@ function refreshCards(){
     if(up)up.disabled=G.gold<towerUpCost(TOWER_BY[UIS.selTower.id],UIS.selTower.lvl);
   }
 }
-function onWaveEnd(){refreshCards();}
+function onWaveEnd(){refreshCards();if(G&&G.blessingPending){G.blessingPending=false;setTimeout(()=>showWheel(DIVINE_SLICES,'✨ Blessing of the Gods','The gods pour their favor upon you — claim a boon!'),400);}}
 
 /* ================= wheel of fortune ================= */
+let WHEEL=null; // active slice set
+const DIVINE_SLICES=[
+ {label:'Towers +1',col:'#c9a227',w:16,apply(){let n=0;for(const t of G.towers){if(!t.building&&t.lvl<CFG.MAX_TOWER_LVL){t.lvl++;n++;}}return n?'All '+n+' towers +1 level!':'+800 gold!'+(G.gold+=800,'');}},
+ {label:'Grand Troop',col:'#7a5ac0',w:14,apply(){const cand=TROOPS.filter(t=>!t.summon&&t.unlock<=G.wave);if(!cand.length){G.gold+=600;return '+600 gold!';}const t=pick(cand);let g=0;while(G.troopLvl[t.id]<CFG.MAX_TROOP_LVL&&upgradeTroopType(t.id))g++;if(G.troopLvl[t.id]>=CFG.MAX_TROOP_LVL&&(G.troopTier[t.id]||0)<2)promoteTroop(t.id);return t.name+'s empowered!';}},
+ {label:'Hero +5',col:'#8a63d8',w:13,apply(){const hs=G.heroes.filter(h=>h.recruited);if(!hs.length){G.gold+=700;return '+700 gold!';}const h=pick(hs);h.lvl=Math.min(CFG.MAX_HERO_LVL,h.lvl+5);const st=heroLiveStat(h);h.maxHp=st.hp;h.hp=st.hp;return h.hdef.name+' +5 levels!';}},
+ {label:'🔨 Builder',col:'#b0623c',w:11,apply(){G.builders++;G.builderSeen=true;return 'A Master Builder joins you!';}},
+ {label:'Full Muster',col:'#3a9a7a',w:12,apply(){for(const tr of G.troops)tr.hp=tr.maxHp;for(const h of activeHeroes())h.hp=h.maxHp;for(const s of SPELLS)G.spells[s.id]=0;G.lives=maxLives();return 'Army healed, spells ready, lives restored!';}},
+ {label:'Relic +1',col:'#b06a3a',w:10,apply(){const cand=RELICS.filter(r=>G.relics[r.id]<r.max);if(!cand.length){G.gold+=800;return '+800 gold!';}const r=pick(cand);G.relics[r.id]++;if(r.id==='walls')G.lives=Math.min(maxLives(),G.lives+r.per);return r.name+' tier '+G.relics[r.id]+'!';}},
+ {label:'Complete Tower',col:'#5ad4c0',w:8,apply(){const b=G.towers.find(t=>t.building);if(b){b.building=false;b.buildLeft=0;G.builders++;if(b.id==='pGod')rollGod(b);return TOWER_BY[b.id].name+' finished instantly!';}G.builders++;G.builderSeen=true;return 'No tower building — a Builder joins instead!';}},
+ {label:'DIVINE',col:'#ff5a4e',w:5,apply(){const hs=G.heroes.filter(h=>h.recruited&&!h.divine);if(hs.length){const cand=hs.filter(h=>h.hdef.legendary||h.asc);const h=cand.length?pick(cand):pick(hs);if(h.hdef.legendary||h.asc){h.divine=true;}else{h.asc=true;}const st=heroLiveStat(h);h.maxHp=st.hp;h.hp=st.hp;return h.hdef.name+((h.divine)?' is now DIVINE!':' has ASCENDED!');}G.gold+=1500;return '+1500 gold!';}},
+];
 const WHEEL_SLICES=[
  {label:'150g',col:'#41639a',w:20,apply(){G.gold+=150;return '+150 gold!';}},
  {label:'Troop +1',col:'#7a5ac0',w:13,apply(){
@@ -900,16 +983,17 @@ const WHEEL_SLICES=[
 ];
 function drawWheel(cv,rot){
   const c=cv.getContext('2d');
+  const SL=WHEEL||WHEEL_SLICES;
   const R=cv.width/2,cx=R,cy=R;
   c.clearRect(0,0,cv.width,cv.height);
-  const total=WHEEL_SLICES.reduce((s,x)=>s+x.w,0);
+  const total=SL.reduce((s,x)=>s+x.w,0);
   let a=rot;
-  for(const sl of WHEEL_SLICES){
+  for(const sl of SL){
     const span=sl.w/total*Math.PI*2;
     c.beginPath();c.moveTo(cx,cy);c.arc(cx,cy,R-8,a,a+span);c.closePath();
     c.fillStyle=sl.col;c.fill();
     c.strokeStyle='rgba(18,13,26,0.8)';c.lineWidth=2;c.stroke();
-    if(sl.label==='JACKPOT'){
+    if(sl.label==='JACKPOT'||sl.label==='DIVINE'){
       c.save();c.clip();
       c.fillStyle='rgba(255,255,255,0.25)';
       c.beginPath();c.moveTo(cx,cy);c.arc(cx,cy,R-8,a,a+span*0.5);c.closePath();c.fill();
@@ -918,8 +1002,8 @@ function drawWheel(cv,rot){
     c.save();
     c.translate(cx,cy);c.rotate(a+span/2);
     c.textAlign='right';c.textBaseline='middle';
-    c.font=(sl.label==='JACKPOT'?'bold 13px':'bold 12px')+' Georgia, serif';
-    c.fillStyle=sl.label==='JACKPOT'?'#fff2c0':'#f0e8d0';
+    c.font=((sl.label==='JACKPOT'||sl.label==='DIVINE')?'bold 12px':'bold 11px')+' Georgia, serif';
+    c.fillStyle=(sl.label==='JACKPOT'||sl.label==='DIVINE')?'#fff2c0':'#f0e8d0';
     c.strokeStyle='rgba(0,0,0,0.55)';c.lineWidth=3;
     c.strokeText(sl.label,R-18,0);
     c.fillText(sl.label,R-18,0);
@@ -937,8 +1021,13 @@ function drawWheel(cv,rot){
   c.fillStyle='#d83a3a';c.fill();
   c.strokeStyle='rgba(18,13,26,0.9)';c.lineWidth=2;c.stroke();
 }
-function showWheel(){
+function showWheel(slices,title,sub){
   const ov=$('wheelOverlay'),cv=$('wheelCv');
+  WHEEL=slices||WHEEL_SLICES;
+  const blessing=!!slices;
+  const hEl=ov.querySelector('.wheel-box h1'),sEl=ov.querySelector('.wheel-box .wsub');
+  if(hEl)hEl.textContent=title||'🎡 Wheel of Fortune';
+  if(sEl)sEl.textContent=sub||'One free spin per battle. Fortune favors the bold…';
   ov.style.display='flex';
   $('wheelResult').textContent='';
   $('btnSpin').disabled=false;
@@ -946,14 +1035,15 @@ function showWheel(){
   drawWheel(cv,0);
   $('btnSpin').onclick=()=>{
     $('btnSpin').disabled=true;
-    G.spun=true;
+    if(!blessing)G.spun=true;
     /* pick weighted outcome, then animate the wheel to land on it */
-    const total=WHEEL_SLICES.reduce((s,x)=>s+x.w,0);
+    const SL=WHEEL;
+    const total=SL.reduce((s,x)=>s+x.w,0);
     let roll=Math.random()*total,idx=0;
-    for(let i=0;i<WHEEL_SLICES.length;i++){roll-=WHEEL_SLICES[i].w;if(roll<=0){idx=i;break;}}
+    for(let i=0;i<SL.length;i++){roll-=SL[i].w;if(roll<=0){idx=i;break;}}
     let startA=0;
-    for(let i=0;i<idx;i++)startA+=WHEEL_SLICES[i].w/total*Math.PI*2;
-    const span=WHEEL_SLICES[idx].w/total*Math.PI*2;
+    for(let i=0;i<idx;i++)startA+=SL[i].w/total*Math.PI*2;
+    const span=SL[idx].w/total*Math.PI*2;
     const center=startA+span*rnd(0.25,0.75);
     const pointer=-Math.PI/2;
     const target=pointer-center+Math.PI*2*5; // 5 extra revolutions
@@ -968,13 +1058,14 @@ function showWheel(){
       /* tick when the slice under the pointer changes */
       const under=(((pointer-rot)%(Math.PI*2))+Math.PI*2)%(Math.PI*2);
       let acc=0,ci=0;
-      for(let i=0;i<WHEEL_SLICES.length;i++){const s2=WHEEL_SLICES[i].w/total*Math.PI*2;if(under>=acc&&under<acc+s2){ci=i;break;}acc+=s2;}
+      for(let i=0;i<SL.length;i++){const s2=SL[i].w/total*Math.PI*2;if(under>=acc&&under<acc+s2){ci=i;break;}acc+=s2;}
       if(ci!==lastIdx){lastIdx=ci;SFXp('ui_click');}
       if(u<1){requestAnimationFrame(anim);return;}
-      const msg=WHEEL_SLICES[idx].apply();
+      const msg=SL[idx].apply();
       $('wheelResult').textContent=msg;
-      setBanner('🎡 '+msg,WHEEL_SLICES[idx].label==='JACKPOT');
-      SFXp(WHEEL_SLICES[idx].label==='JACKPOT'?'horn_victory':'chest');
+      const big=SL[idx].label==='JACKPOT'||SL[idx].label==='DIVINE';
+      setBanner((blessing?'✨ ':'🎡 ')+msg,big);
+      SFXp(big?'horn_victory':'chest');
       saveGame();
       refreshCards();
       setTimeout(()=>{ov.style.display='none';if(G)G.paused=false;},2200);

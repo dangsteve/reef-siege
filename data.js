@@ -172,6 +172,52 @@ const TOWERS=[
 ];
 const TOWER_BY={};TOWERS.forEach(t=>TOWER_BY[t.id]=t);
 
+/* ============================================================
+   PREMIUM TOWERS — built ONLY by a Master Builder over many waves.
+   Two legendary, two supreme, one divine. Never in the normal shop.
+   ============================================================ */
+const PREM_TOWERS=[
+ {id:'pHeal', name:'Grove Sanctuary', prem:'legendary', tierName:'Legendary', buildWaves:10, cost:1400,
+  rate:0, range:180, dtype:'none', proj:'none', snd:'holy_heal', heal:30, hue:'#54e0a0',
+  desc:'A cleric-mage channels a constant healing aura over your troops and heroes. Scales with level.'},
+ {id:'pStorm', name:'Wrath Spire', prem:'legendary', tierName:'Legendary', buildWaves:14, cost:1700,
+  rate:0, range:0, dtype:'magic', proj:'none', snd:'skill_meteor', hue:'#c060ff',
+  desc:'A stormcaller-mage hurls random calamities — thunder, quake, flood or fire. Timing and power are pure chance.'},
+ {id:'pGat', name:'Repeater Ballista', prem:'supreme', tierName:'Supreme', buildWaves:22, cost:3200,
+  dmg:30, rate:8, range:220, dtype:'phys', proj:'arrow', pierce:1, snd:'arrow', targets:'both', hue:'#ff5a3a',
+  desc:'A medieval machine-gun: a blur of bolts that shreds packs and melts bosses. Scales hard with level.'},
+ {id:'pShadow', name:'Umbral Chain', prem:'supreme', tierName:'Supreme', buildWaves:28, cost:3800,
+  dmg:70, rate:0.8, range:260, dtype:'magic', proj:'none', snd:'zap', targets:'both', hue:'#8a3adf',
+  desc:'Tendrils of darkness leap between EVERY enemy on the field at once. Scales with level.'},
+ {id:'pGod', name:'Aeon Monolith', prem:'divine', tierName:'Divine', buildWaves:35, cost:7500,
+  rate:0, range:320, dtype:'magic', proj:'none', snd:'boss_die', hue:'#ffd75e',
+  desc:'The tower of ten fates. Every wave it becomes something new at random — the effect, the timing and the power are never the same twice.'},
+];
+const PREM_BY={};PREM_TOWERS.forEach(t=>{TOWER_BY[t.id]=t;PREM_BY[t.id]=t;});
+const PREM_RANK={legendary:0,supreme:1,divine:2};
+
+/* premium healing scales with level */
+const premHealAmt=(t)=>Math.round(30*Math.pow(1.5,(t.lvl||1)-1)*towerTierMul(t)*(1+0.6*PREM_RANK[TOWER_BY[t.id].prem]));
+
+/* Master Builders — rare arrivals that raise premium towers */
+const BUILDER_CHANCE=0.06;      // per wave cleared
+const BLESSING_CHANCE=0.04;     // Blessing of the Gods wheel
+
+/* the ten fates of the Aeon Monolith (re-rolled every wave) */
+const GOD_MODES=[
+ {id:'gold',      name:'Midas Font',     col:'#e8c93a', ico:'🪙'},
+ {id:'spawn',     name:'Host of Aeons',  col:'#b0623c', ico:'🛡'},
+ {id:'lightning', name:'Skyfury',        col:'#8ad4ff', ico:'⚡'},
+ {id:'arrow',     name:'Endless Volley', col:'#e0d090', ico:'🏹'},
+ {id:'convert',   name:'Dominion',       col:'#7ec244', ico:'🔀'},
+ {id:'frost',     name:'Absolute Zero',  col:'#69c8e8', ico:'❄'},
+ {id:'shield',    name:'Aegis Eternal',  col:'#d8b45a', ico:'🛡'},
+ {id:'hero',      name:'Call of Legends', col:'#ffb0a0', ico:'🦸'},
+ {id:'respawn',   name:'Undying Rite',   col:'#c88bff', ico:'✟'},
+ {id:'meteor',    name:'Starfall',       col:'#ff7a4e', ico:'☄'},
+];
+const GOD_BY={};GOD_MODES.forEach(m=>GOD_BY[m.id]=m);
+
 function towerStat(def,lvl){
   const m=Math.pow(1.55,lvl-1);
   return {
@@ -221,6 +267,8 @@ const TROOPS=[
  {id:'footman',  name:'Footman',     cost:0,   hp:130, dmg:11, rate:0.9, speed:70,  melee:true,  armor:0.15, unlock:999, summon:true, snd:'melee_hit1', desc:'Garrison soldier from your Barracks.'},
  {id:'ranger',   name:'Ranger',      cost:0,   hp:70,  dmg:13, rate:1.0, speed:70,  melee:false, range:160, unlock:999, summon:true, snd:'arrow', desc:'Garrison archer from your Ranger Lodge.'},
  {id:'wargolem', name:'War Golem',   cost:0,   hp:900, dmg:52, rate:1.6, speed:46,  melee:true,  cleave:50, armor:0.3, unlock:999, summon:true, snd:'giant_smash', desc:'Siege construct from your Workshop.'},
+ {id:'thrall',   name:'Thrall',      cost:0,   hp:240, dmg:22, rate:1.0, speed:64,  melee:true,  unlock:999, summon:true, snd:'melee_hit2', desc:'An enemy bent to your will by the Aeon Monolith.'},
+ {id:'aeonchamp',name:'Aeon Champion',cost:0,  hp:2600,dmg:150,rate:1.2, speed:70,  melee:true,  cleave:60, armor:0.3, unlock:999, summon:true, snd:'giant_smash', desc:'A legend called from beyond by the Aeon Monolith.'},
 ];
 const TROOP_BY={};TROOPS.forEach(t=>TROOP_BY[t.id]=t);
 const ALL_TROOPS_WAVE=Math.max(...TROOPS.filter(t=>!t.summon).map(t=>t.unlock));
@@ -342,6 +390,12 @@ const SPELLS=[
   desc:'Click a spot: rain fire on it — heavy damage plus burn.'},
  {id:'blessing', name:'Sanctified Ground', icon:'heal', cd:40, radius:125, target:true, dur:5, snd:'consumable_heal',
   desc:'Click a spot: hallow the ground — heals your army there for 5s.'},
+ {id:'frostnova', name:'Frost Nova', icon:'frost', cd:55, target:false, snd:'frost',
+  desc:'Flash-freezes every enemy on the field and cracks them for heavy damage.'},
+ {id:'chainbolt', name:'Chain Lightning', icon:'bolt', cd:38, target:true, snd:'zap',
+  desc:'Click a foe: a bolt forks through up to 10 enemies.'},
+ {id:'warcry', name:'War Cry', icon:'warcry', cd:75, target:false, snd:'skill_warcry',
+  desc:'Rallies your army: +60% damage and a full heal for 8 seconds.'},
  {id:'ragnarok', name:'RAGNAROK', icon:'ragnarok', cd:300, target:false, snd:'boss_die',
   desc:'The sky falls. Devastates every enemy, stuns the horde, resummons your entire army free, and empowers it. The last-minute clutch.'},
 ];

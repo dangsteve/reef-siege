@@ -23,13 +23,14 @@ function newGame(mapId){
     artifacts:{}, expLvl:0, blitz:0,
     heroes:[], selHero:null,
     relics:{},
-    spells:{firestorm:8,blessing:8,ragnarok:240},
+    spells:{firestorm:8,blessing:8,frostnova:10,chainbolt:6,warcry:12,ragnarok:240},
     zones:[], ragnarokT:0,
     rally:MAP.P.map(p=>p.total*0.5),
     waveActive:false, spawnQueue:[], spawnT:0, intermission:12,
     waveBanner:null, bannerT:0, shieldT:0, spun:false,
     kills:0, bossKills:0, goldEarned:0, shake:0, streak:0, waveStartLives:CFG.START_LIVES,
     maintainT:0, auraT:0, targetMode:null,
+    builders:0, builderSeen:false, godRespawn:false, godShield:false, warcryT:0, blessingPending:false,
   };
   TROOPS.forEach(t=>{G.troopLvl[t.id]=0;G.desired[t.id]=0;G.troopTier[t.id]=0;});
   RELICS.forEach(r=>G.relics[r.id]=0);
@@ -184,6 +185,18 @@ function placeTower(id,c,r){
     G.walls.push(w);
     pushUndo({t:'wallplace',wall:w,cost:def.cost});
     burst(p.x,p.y,12,'#b8b2c0');
+    SFXp('build');
+    return true;
+  }
+  if(def.prem){
+    if(G.builders<1||!canPlace(c,r))return false;
+    G.gold-=def.cost;G.builders--;
+    const t={id,c,r,x:c*CFG.CELL+20,y:r*CFG.CELL+20,lvl:1,cd:0,ang:-Math.PI/2,auraMul:1,heat:0,tick:0,kills:0,tier:1,
+      building:true,buildLeft:def.buildWaves,buildTotal:def.buildWaves};
+    G.towers.push(t);
+    burst(t.x,t.y,16,def.hue);
+    addFx({kind:'ring',x:t.x,y:t.y,r:8,maxR:60,life:0.7,col:def.hue});
+    setBanner('🔨 A Master Builder begins the '+def.name+' — ready in '+def.buildWaves+' waves.',true);
     SFXp('build');
     return true;
   }
@@ -372,6 +385,19 @@ function castSpell(id){
   const def=SPELL_BY[id];
   if(!def||G.spells[id]>0||G.over)return false;
   if(def.target){G.targetMode='spell:'+id;return true;}
+  if(id==='frostnova'){
+    G.spells.frostnova=def.cd;
+    for(const e of G.enemies){if(e.dead)continue;e.slowT=Math.max(e.slowT,3.5);e.slowP=1;damageEnemy(e,e.maxHp*0.12+120,'magic');}
+    addFx({kind:'ring',x:CFG.W/2,y:CFG.H/2,r:20,maxR:Math.max(CFG.W,CFG.H),life:0.6,col:'#8ad4ff'});
+    G.shake=Math.max(G.shake,6);SFXp(def.snd);return true;
+  }
+  if(id==='warcry'){
+    G.spells.warcry=def.cd;G.warcryT=8;
+    for(const tr of G.troops)tr.hp=tr.maxHp;
+    for(const h of activeHeroes())h.hp=h.maxHp;
+    addFx({kind:'ring',x:CFG.W/2,y:CFG.H*0.7,r:16,maxR:420,life:0.6,col:'#ffca5e'});
+    setBanner('⚔ WAR CRY! Your army roars — +60% damage!',true);SFXp(def.snd);return true;
+  }
   /* RAGNAROK — the last-minute clutch */
   G.spells.ragnarok=def.cd;
   G.shake=16;
@@ -420,6 +446,10 @@ function spellAt(id,x,y){
   }else if(id==='blessing'){
     G.zones.push({kind:'bless',x,y,r:def.radius,t:def.dur,max:def.dur});
     addFx({kind:'ring',x,y,r:16,maxR:def.radius,life:0.6,col:'#7ee08a'});
+  }else if(id==='chainbolt'){
+    const start=nearestEnemyTo(x,y,200);
+    if(start)chainFrom(x,y,start,10,(240+G.wave*16),'#bfe0ff',null);
+    G.shake=Math.max(G.shake,4);
   }
   SFXp(def.snd);
   return true;
@@ -690,6 +720,10 @@ function startWave(bonus){
   if(bonus>0){G.gold+=bonus;addText(CFG.W/2,90,'+'+bonus+'g early bonus!','#ffd75e');}
   G.waveActive=true;
   G.waveStartLives=G.lives;
+  G.godRespawn=false;G.godShield=false;
+  for(const h of G.heroes)h.godRevived=false;
+  for(const t of G.troops)t.godRevived=false;
+  for(const t of G.towers)if(t.id==='pGod'&&!t.building)rollGod(t);
   if(!G.chest&&Math.random()<0.14){
     let tries=0;
     while(tries++<40){
@@ -711,6 +745,30 @@ function endWave(){
   if(G.over)return;
   G.waveActive=false;
   if(G.blitz>0){G.blitz--;if(G.blitz===0)setBanner('⏩ Blitz complete — back to real time!',true);}
+  /* premium construction advances one step per wave cleared */
+  for(const t of G.towers){
+    if(!t.building)continue;
+    t.buildLeft--;
+    if(t.buildLeft<=0){
+      t.building=false;t.buildLeft=0;t.tick=0;
+      G.builders++;
+      const pdef=TOWER_BY[t.id];
+      setBanner('✨ '+pdef.name+' is complete! Your Master Builder is free again.',true);
+      burst(t.x,t.y,34,pdef.hue);
+      addFx({kind:'ring',x:t.x,y:t.y,r:10,maxR:130,life:0.9,col:pdef.hue});
+      if(t.id==='pGod')rollGod(t);
+      SFXp('horn_victory');
+    }
+  }
+  /* 🔨 a Master Builder may arrive after any wave */
+  if(Math.random()<BUILDER_CHANCE){
+    G.builders++;
+    const first=!G.builderSeen;G.builderSeen=true;
+    setBanner(first?'🔨 A Master Builder has joined you! A tab of Premium Towers is now open.':'🔨 Another Master Builder has arrived!',true);
+    SFXp('chest');
+  }
+  /* ✨ Blessing of the Gods — a second, mightier wheel */
+  if(Math.random()<BLESSING_CHANCE)G.blessingPending=true;
   const reward=waveReward(G.wave);
   G.gold+=reward;G.goldEarned+=reward;
   addText(CFG.W/2,120,'Wave '+G.wave+' cleared!  +'+reward+'g','#ffd75e');
@@ -898,10 +956,17 @@ function damageAlly(t,dmg){
     const armor=TROOP_BY[t.id].armor||0;
     dmg*=(1-armor);
   }
-  if(G.shieldT>0)dmg*=0.6;
+  if(G.shieldT>0||G.godShield)dmg*=0.6;
   t.hp-=dmg;
   t.flash=0.1;
   if(t.hp<=0){
+    if(G.godRespawn&&!t.godRevived){
+      t.godRevived=true;t.hp=t.maxHp;
+      addFx({kind:'ring',x:t.x,y:t.y,r:8,maxR:60,life:0.6,col:'#c88bff'});
+      burst(t.x,t.y,14,'#c88bff');
+      addText(t.x,t.y-20,'Undying!','#c88bff',1);
+      return;
+    }
     if(t.isHero){
       t.dead=true;t.respawnT=heroStat(t.hdef,t.lvl).respawn;
       burst(t.x,t.y,20,t.hdef.col);
@@ -1005,6 +1070,24 @@ function towerFire(t,st,def){
         cur=next;
       }
       addFx({kind:'zap',pts,life:0.18});
+      SFXp('zap');break;}
+    case 'pGat':
+      G.projs.push({kind:'arrow',x:t.x,y:t.y-30,tgt,lx:tgt.x,ly:tgt.y,spd:620,dmg,dtype:'phys',srcT:t});
+      if(!LOW_FX&&Math.random()<0.5)addFx({kind:'muzzle',x:t.x,y:t.y-30,ang:t.ang,life:0.06,col:'#ffcaa0'});
+      if(t.heat<=0){SFXp('arrow');t.heat=0.14;}
+      break;
+    case 'pShadow':{
+      const pts=[{x:t.x,y:t.y-40}];
+      const targets=inRange.slice().sort((a,b)=>(MAP.P[a.pi].total-a.d)-(MAP.P[b.pi].total-b.d)).slice(0,24);
+      let dd=dmg;
+      for(const e of targets){
+        damageEnemy(e,dd,'magic',{srcT:t});
+        pts.push({x:e.x,y:e.y});
+        if(!e.dead){e.slowT=Math.max(e.slowT,1);e.slowP=Math.max(e.slowP,0.3);}
+        dd*=0.95;
+      }
+      addFx({kind:'zap',pts,life:0.24,dark:true});
+      G.shake=Math.max(G.shake,2);
       SFXp('zap');break;}
     case 'flame':{
       damageEnemy(tgt,dmg,'magic',{srcT:t});
@@ -1205,6 +1288,108 @@ function densestCluster(x,y,maxR){
   }
   return best?{x:best.x,y:best.y,n:bn}:null;
 }
+function nearestEnemyTo(x,y,range){
+  let best=null,bd=range*range;
+  for(const e of G.enemies){if(e.dead)continue;const q=dist2(x,y,e.x,e.y);if(q<bd){bd=q;best=e;}}
+  return best;
+}
+function chainFrom(sx,sy,start,n,dmgAbs,col,src){
+  const pts=[{x:sx,y:sy}];
+  let cur=start,d=dmgAbs,seen=new Set();
+  for(let i=0;i<n&&cur;i++){
+    seen.add(cur);damageEnemy(cur,d,'magic',src?{srcT:src}:undefined);
+    pts.push({x:cur.x,y:cur.y});d*=0.88;
+    let nx=null,bd=170*170;
+    for(const e of G.enemies){if(e.dead||seen.has(e))continue;const q=dist2(cur.x,cur.y,e.x,e.y);if(q<bd){bd=q;nx=e;}}
+    cur=nx;
+  }
+  addFx({kind:'zap',pts,life:0.22,col});
+}
+function spawnGodTroop(id,pi,d,W){
+  const def=TROOP_BY[id];
+  const sc=Math.sqrt(hpMul(W));
+  const hp=Math.round(def.hp*sc),dmg=def.dmg*sc;
+  const p=posAt(pi,d);
+  G.troops.push({id,lvl:0,pi,d,lane:rnd(-15,15),x:p.x,y:p.y,hp,maxHp:hp,skelDmg:dmg,
+    atkCd:rnd(0,0.4),foe:null,state:'walk',anim:rnd(0,6),face:-1,healCd:0,swing:0,flash:0,
+    decay:id==='aeonchamp'?45:26,holdD:undefined,srcT:null});
+  burst(p.x,p.y,10,id==='aeonchamp'?'#ffb0a0':'#c8a8ff');
+}
+function convertEnemy(e){
+  if(e.dead||e.def.event)return;
+  const hp=Math.round(Math.max(150,e.maxHp*0.5));
+  const dmg=Math.max(22,(e.def.hp||60)*0.4*Math.sqrt(hpMul(G.wave)));
+  const p=posAt(e.pi,e.d);
+  G.troops.push({id:'thrall',lvl:0,pi:e.pi,d:e.d,lane:rnd(-12,12),x:p.x,y:p.y,hp,maxHp:hp,skelDmg:dmg,
+    atkCd:rnd(0,0.4),foe:null,state:'walk',anim:rnd(0,6),face:1,healCd:0,swing:0,flash:0,decay:36});
+  e.dead=true;
+  addText(e.x,e.y-e.size-8,'Converted!','#7ec244',1.1);
+  addFx({kind:'ring',x:e.x,y:e.y,r:6,maxR:46,life:0.4,col:'#7ec244'});
+  burst(e.x,e.y,10,'#7ec244');
+}
+/* ---------- PREMIUM TOWER BEHAVIORS ---------- */
+function premHealTick(t,dt){
+  t.tick+=dt;
+  if(t.tick<0.55)return;
+  t.tick=0;
+  const amt=premHealAmt(t),rr=(TOWER_BY[t.id].range||180)*(1+0.08*((t.tier||1)-1));
+  let any=false;
+  for(const u of G.troops)if(u.hp<u.maxHp&&dist2(u.x,u.y,t.x,t.y)<rr*rr){u.hp=Math.min(u.maxHp,u.hp+amt);any=true;}
+  for(const h of activeHeroes())if(h.hp<h.maxHp&&dist2(h.x,h.y,t.x,t.y)<rr*rr){h.hp=Math.min(h.maxHp,h.hp+amt*2);any=true;}
+  if(any&&Math.random()<0.4)addFx({kind:'heal',x:t.x+rnd(-18,18),y:t.y-rnd(0,22),life:0.5});
+}
+function premStormTick(t,dt){
+  if(t.calT===undefined)t.calT=rnd(1.5,8);
+  t.calT-=dt;
+  if(t.calT>0)return;
+  t.calT=rnd(1.4,15);
+  const mag=rnd(0.4,3.2);
+  const base=120*Math.pow(1.55,(t.lvl-1))*towerTierMul(t)*Math.sqrt(hpMul(G.wave));
+  const dmg=base*mag;
+  const kind=pick(['thunder','quake','flood','fire']);
+  if(kind==='thunder'){
+    const start=nearestEnemyTo(t.x,t.y,900);
+    if(start)chainFrom(t.x,t.y-40,start,14,dmg*0.6,'#8ad4ff',t);
+  }else if(kind==='quake'){
+    addFx({kind:'ring',x:t.x,y:t.y,r:14,maxR:300,life:0.6,col:'#c8a060'});
+    G.shake=Math.max(G.shake,7);
+    for(const e of G.enemies){if(e.dead||e.def.fly)continue;damageEnemy(e,dmg,'magic',{srcT:t});if(!e.dead){e.slowT=Math.max(e.slowT,1.2);e.slowP=Math.max(e.slowP,0.8);}}
+  }else if(kind==='flood'){
+    addFx({kind:'ring',x:t.x,y:t.y,r:14,maxR:320,life:0.5,col:'#4aa8e0'});
+    for(const e of G.enemies){if(e.dead)continue;e.d=Math.max(6,e.d-rnd(30,90)*mag);e.slowT=Math.max(e.slowT,2.5);e.slowP=Math.max(e.slowP,0.6);damageEnemy(e,dmg*0.4,'magic',{srcT:t});}
+  }else{
+    const tg=densestCluster(t.x,t.y,380)||{x:t.x,y:t.y};
+    addFx({kind:'firestorm',x:tg.x,y:tg.y,r:100,life:0.9,t:0});
+    for(const e of G.enemies){if(e.dead)continue;if(dist2(e.x,e.y,tg.x,tg.y)<115*115){damageEnemy(e,dmg,'magic',{srcT:t});if(!e.dead){e.burnT=3;e.burnDps=Math.max(e.burnDps,dmg*0.2);}}}
+  }
+  if(mag>2.6){setBanner('🌩 '+TOWER_BY[t.id].name+' unleashes a CATACLYSM!');G.shake=Math.max(G.shake,9);}
+  SFXp('skill_meteor');
+}
+function rollGod(t){
+  const m=pick(GOD_MODES);
+  t.godMode=m.id;t.godMag=rnd(0.35,3.0);t.godT=rnd(0.8,4);t.godName=m.name;
+  addText(t.x,t.y-42,m.ico+' '+m.name,m.col,1.7);
+  if(m.id==='shield'){for(const w of G.walls)w.hp=w.maxHp;G.godShield=true;}
+  if(m.id==='respawn')G.godRespawn=true;
+}
+function godTick(t,dt){
+  if(t.godMode===undefined){rollGod(t);return;}
+  if(t.godMode==='shield'||t.godMode==='respawn')return;
+  t.godT-=dt;
+  if(t.godT>0)return;
+  const mag=t.godMag,W=G.wave,sc=Math.sqrt(hpMul(W));
+  switch(t.godMode){
+    case 'gold':{const g=Math.round((150+26*W)*mag);G.gold+=g;G.goldEarned+=g;addText(t.x,t.y-30,'+'+g+'g','#ffd75e',1.1);burst(t.x,t.y-16,5,'#ffd75e');SFXp('mint_coin');t.godT=rnd(1.8,3.4);break;}
+    case 'spawn':{const np=nearestPathPoint(t.x,t.y);for(let i=0;i<Math.ceil(mag);i++)spawnGodTroop('thrall',np.pi,clamp(np.d+rnd(-40,40),20,MAP.P[np.pi].total-40),W);t.godT=rnd(4,7);break;}
+    case 'lightning':{const s=nearestEnemyTo(t.x,t.y,t.range||320);if(s)chainFrom(t.x,t.y-40,s,10,220*mag*sc,'#8ad4ff',t);t.godT=rnd(1.0,2.2);break;}
+    case 'arrow':{const e=nearestEnemyTo(t.x,t.y,t.range||320);if(e)G.projs.push({kind:'arrow',x:t.x,y:t.y-30,tgt:e,lx:e.x,ly:e.y,spd:560,dmg:130*mag*sc,dtype:'phys',srcT:t});t.godT=rnd(0.08,0.18);break;}
+    case 'convert':{const cand=G.enemies.filter(e=>!e.dead&&!e.def.event);if(cand.length)convertEnemy(pick(cand));t.godT=rnd(3.5,6);break;}
+    case 'frost':{for(const e of G.enemies){if(e.dead)continue;e.slowT=Math.max(e.slowT,3);e.slowP=1;damageEnemy(e,e.maxHp*0.05*mag+40,'magic',{srcT:t});}addFx({kind:'ring',x:t.x,y:t.y,r:12,maxR:360,life:0.5,col:'#8ad4ff'});t.godT=rnd(3,5);break;}
+    case 'hero':{const np=nearestPathPoint(t.x,t.y);spawnGodTroop('aeonchamp',np.pi,clamp(np.d,20,MAP.P[np.pi].total-40),W);addFx({kind:'ring',x:t.x,y:t.y,r:10,maxR:120,life:0.7,col:'#ffb0a0'});t.godT=rnd(8,14);break;}
+    case 'meteor':{const tg=densestCluster(t.x,t.y,360)||{x:t.x+rnd(-100,100),y:t.y+rnd(-60,60)};addFx({kind:'firestorm',x:tg.x,y:tg.y,r:95,life:0.9,t:0});G.shake=Math.max(G.shake,6);for(const e of G.enemies){if(e.dead)continue;if(dist2(e.x,e.y,tg.x,tg.y)<100*100)damageEnemy(e,(e.maxHp*0.35+300)*mag,'magic',{srcT:t});}t.godT=rnd(1.6,3);break;}
+    default:t.godT=2;
+  }
+}
 
 /* ================= UPDATE ================= */
 function stepSim(dt){
@@ -1223,6 +1408,7 @@ function subStep(dt){
   if(G.shake>0)G.shake=Math.max(0,G.shake-dt*30);
   if(G.shieldT>0)G.shieldT-=dt;
   if(G.ragnarokT>0)G.ragnarokT-=dt;
+  if(G.warcryT>0)G.warcryT-=dt;
   for(const s of SPELLS)if(G.spells[s.id]>0)G.spells[s.id]-=dt;
   for(const z of G.zones){
     z.t-=dt;
@@ -1281,6 +1467,13 @@ function subStep(dt){
   for(const t of G.towers){
     const def=TOWER_BY[t.id];
     if(t.heat>0)t.heat-=dt;
+    if(t.building)continue;
+    if(def.prem){
+      if(t.id==='pHeal'){premHealTick(t,dt);continue;}
+      if(t.id==='pStorm'){premStormTick(t,dt);continue;}
+      if(t.id==='pGod'){godTick(t,dt);continue;}
+      /* pGat & pShadow fall through to the normal fire path below */
+    }
     if(def.spawnTroop){
       t.tick+=dt;
       if(t.tick>=def.spawnCd/(1+0.1*(t.lvl-1))){
@@ -1562,7 +1755,7 @@ function subStep(dt){
         if(tr.atkCd<=0&&def.dmg>0){
           tr.atkCd=def.rate;
           tr.swing=0.18;
-          let dmg=st.dmg*(1+relicVal('steel'))*(G.ragnarokT>0?1.5:1);
+          let dmg=st.dmg*(1+relicVal('steel'))*(G.ragnarokT>0?1.5:1)*(G.warcryT>0?1.6:1);
           if(banner&&dist2(tr.x,tr.y,banner.x,banner.y)<130*130)dmg*=1.15;
           if(def.bonusFast&&tr.foe.baseSpeed>=80)dmg*=def.bonusFast;
           if(def.id==='berserker'){const hpp=tr.hp/tr.maxHp;tr.atkCd=def.rate*(0.45+0.55*hpp);}
@@ -1657,7 +1850,7 @@ function subStep(dt){
         if(def.melee&&!foe.blk&&!foe.def.fly)foe.blk=h;
         if(h.atkCd<=0){
           h.atkCd=def.rate;h.swing=0.2;
-          let dmg=st.dmg*(G.ragnarokT>0?1.5:1);
+          let dmg=st.dmg*(G.ragnarokT>0?1.5:1)*(G.warcryT>0?1.6:1);
           const hasPassive=def.passive&&h.lvl>=def.passive.lvl;
           if(def.airBonus&&foe.def.fly)dmg*=hasPassive?2:1.5;
           if(def.id==='lyra'&&hasPassive&&Math.random()<0.15){dmg*=2;addText(h.x,h.y-24,'CRIT','#ffd75e',0.7);}
@@ -1705,8 +1898,9 @@ function subStep(dt){
 function saveKey(){return 'rs2_save_'+G.mapId;}
 function saveGame(){
   try{
-    const s={v:4,mapId:G.mapId,gold:G.gold,lives:G.lives,wave:G.wave,
-      towers:G.towers.map(t=>({id:t.id,c:t.c,r:t.r,lvl:t.lvl,k:t.kills||0,ti:t.tier||1})),
+    const s={v:5,mapId:G.mapId,gold:G.gold,lives:G.lives,wave:G.wave,
+      builders:G.builders||0,builderSeen:!!G.builderSeen,
+      towers:G.towers.map(t=>({id:t.id,c:t.c,r:t.r,lvl:t.lvl,k:t.kills||0,ti:t.tier||1,bd:t.building?t.buildLeft:0})),
       walls:G.walls.map(w=>({pi:w.pi,d:Math.round(w.d),lvl:w.lvl})),
       streak:G.streak,expLvl:G.expLvl||0,
       troopLvl:G.troopLvl,desired:G.desired,rally:G.rally,
@@ -1724,12 +1918,13 @@ function clearSave(){try{localStorage.removeItem(saveKey());}catch(err){}}
 function loadGame(mapId){
   try{
     const s=JSON.parse(localStorage.getItem('rs2_save_'+mapId));
-    if(!s||(s.v!==2&&s.v!==3&&s.v!==4)||!(s.lives>0))return false;
+    if(!s||(s.v<2||s.v>5)||!(s.lives>0))return false;
     newGame(mapId);
     for(let L=1;L<=(s.expLvl||0);L++)applyExpansion(L,false);
     G.gold=s.gold;G.lives=s.lives;G.wave=s.wave;
     G.kills=s.kills||0;G.bossKills=s.bossKills||0;G.goldEarned=s.goldEarned||0;
     G.autoWave=s.autoWave!==false;G.speed=s.speed||1;G.spun=!!s.spun;G.streak=s.streak||0;
+    G.builders=s.builders||0;G.builderSeen=!!s.builderSeen;
     if(Array.isArray(s.rally))G.rally=MAP.P.map((p,i)=>clamp(s.rally[i]||p.total*0.5,40,p.total-60));
     Object.assign(G.troopLvl,s.troopLvl||{});
     Object.assign(G.desired,s.desired||{});
@@ -1744,7 +1939,10 @@ function loadGame(mapId){
     G.towers=[];
     for(const t of s.towers||[]){
       if(!TOWER_BY[t.id])continue;
-      G.towers.push({id:t.id,c:t.c,r:t.r,x:t.c*CFG.CELL+20,y:t.r*CFG.CELL+20,lvl:t.lvl,cd:0,ang:-Math.PI/2,auraMul:1,heat:0,tick:0,kills:t.k||0,tier:t.ti||1});
+      const pd=TOWER_BY[t.id];
+      const bd=(pd&&pd.prem&&t.bd>0)?t.bd:0;
+      G.towers.push({id:t.id,c:t.c,r:t.r,x:t.c*CFG.CELL+20,y:t.r*CFG.CELL+20,lvl:t.lvl,cd:0,ang:-Math.PI/2,auraMul:1,heat:0,tick:0,kills:t.k||0,tier:t.ti||1,
+        building:bd>0,buildLeft:bd,buildTotal:(pd&&pd.prem)?pd.buildWaves:0});
     }
     for(const hs of s.heroes||[]){
       const h=G.heroes.find(x=>x.id===hs.id);

@@ -31,6 +31,11 @@ castle:{
   lodge:{name:'Ranger Lodge',desc:'Fields rangers who pepper the road — and the sky — with arrows.'},
   siegecamp:{name:'Siege Workshop',desc:'Assembles a lumbering war golem that cleaves whole packs.'},
   wall:{name:'Barricade',desc:'Blocks the road — enemies must batter it down. Build ON the path.'},
+  pHeal:{name:'Grove Sanctuary',desc:'A cleric-mage channels a constant healing aura over your troops and heroes.'},
+  pStorm:{name:'Wrath Spire',desc:'A mage hurls random calamities — thunder, quake, flood or fire. Pure chance.'},
+  pGat:{name:'Repeater Ballista',desc:'A medieval machine-gun of bolts that shreds packs and melts bosses.'},
+  pShadow:{name:'Umbral Chain',desc:'Tendrils of darkness leap between EVERY enemy on the field at once.'},
+  pGod:{name:'Aeon Monolith',desc:'The tower of ten fates — a new random power every wave.'},
  },
  troops:{
   militia:{name:'Militia',desc:'Cheap fodder. Holds the line.'},
@@ -48,6 +53,8 @@ castle:{
   templar:{name:'Templar',desc:'Holy bulwark. Heavy armor, mends his own wounds.'},
   stormcaller:{name:'Stormcaller',desc:'Storm bolts crack over whole packs. Hits air.'},
   skeleton:{name:'Risen Skeleton',desc:'Raised from fallen foes. Fights until it crumbles.'},
+  thrall:{name:'Thrall',desc:'An enemy bent to your will by the Aeon Monolith.'},
+  aeonchamp:{name:'Aeon Champion',desc:'A legend called from beyond by the Aeon Monolith.'},
   footman:{name:'Footman',desc:'Garrison soldier from your Barracks.'},
   ranger:{name:'Ranger',desc:'Garrison archer from your Ranger Lodge.'},
   wargolem:{name:'War Golem',desc:'Siege construct from your Workshop.'},
@@ -120,6 +127,9 @@ castle:{
  spells:{
   firestorm:{name:'Firestorm',desc:'Click a spot: rain fire on it — heavy damage plus burn.'},
   blessing:{name:'Sanctified Ground',desc:'Click a spot: hallow the ground — heals your army there for 5s.'},
+  frostnova:{name:'Frost Nova',desc:'Flash-freezes every enemy on the field and cracks them for heavy damage.'},
+  chainbolt:{name:'Chain Lightning',desc:'Click a foe: a bolt forks through up to 10 enemies.'},
+  warcry:{name:'War Cry',desc:'Rallies your army: +60% damage and a full heal for 8 seconds.'},
   ragnarok:{name:'RAGNAROK',desc:'The sky falls. Devastates every enemy, stuns the horde, resummons your entire army free, and empowers it.'},
  },
  txt:{
@@ -163,6 +173,11 @@ reef:{
   lodge:{name:'Archerfish School',desc:'Fields archerfish who pepper the current — and the waters above — with jets.'},
   siegecamp:{name:'Whalebone Forge',desc:'Assembles a lumbering reef colossus that cleaves whole packs.'},
   wall:{name:'Coral Barricade',desc:'Blocks the current — enemies must batter it down. Build ON the path.'},
+  pHeal:{name:'Anemone Grotto',desc:'A tide-priest channels a constant healing current over your troops and heroes.'},
+  pStorm:{name:'Maelstrom Spire',desc:'A sea-mage hurls random calamities — thunder, quake, flood or fire. Pure chance.'},
+  pGat:{name:'Repeater Harpoon',desc:'A deep-sea machine-gun of harpoons that shreds shoals and melts bosses.'},
+  pShadow:{name:'Abyssal Chain',desc:'Tendrils of the deep leap between EVERY enemy on the field at once.'},
+  pGod:{name:'Leviathan Monolith',desc:'The tower of ten fates — a new random power every wave.'},
  },
  troops:{
   militia:{name:'Jellyfish',desc:'Cheap stingers. Hold the line.'},
@@ -180,6 +195,8 @@ reef:{
   templar:{name:'Seahorse Lancer',desc:'Holy bulwark of the reef. Heavy armor, mends his own wounds.'},
   stormcaller:{name:'Octomancer',desc:'Ink-storm bolts crack over whole packs. Hits swimmers above.'},
   skeleton:{name:'Drowned Bones',desc:'Raised from fallen foes. Fights until it crumbles.'},
+  thrall:{name:'Thrall',desc:'An enemy bent to your will by the Leviathan Monolith.'},
+  aeonchamp:{name:'Leviathan Champion',desc:'A legend called from the deep by the Leviathan Monolith.'},
   footman:{name:'Crab Guard',desc:'Garrison soldier from your Anemone Bunker.'},
   ranger:{name:'Archerfish',desc:'Garrison sharpshooter from your School.'},
   wargolem:{name:'Reef Colossus',desc:'Living siege construct from your Forge.'},
@@ -253,6 +270,9 @@ reef:{
  spells:{
   firestorm:{name:'Boiling Geyser',desc:'Click a spot: a scalding geyser erupts — heavy damage plus boil.'},
   blessing:{name:'Healing Current',desc:'Click a spot: a warm current — heals your army there for 5s.'},
+  frostnova:{name:'Deep Freeze',desc:'Flash-freezes every enemy on the field and cracks them for heavy damage.'},
+  chainbolt:{name:'Eel Bolt',desc:'Click a foe: a bolt forks through up to 10 enemies.'},
+  warcry:{name:'Sea Rally',desc:'Rallies your shoal: +60% damage and a full heal for 8 seconds.'},
   ragnarok:{name:'MAELSTROM',desc:'The sea itself rebels. Devastates every enemy, stuns the horde, resummons your entire army free, and empowers it.'},
  },
  txt:{
@@ -280,6 +300,7 @@ function applyTheme(id){
   const P=THEME_PACKS[CUR_THEME];
   THEME=P;
   for(const t of TOWERS){const o=P.towers[t.id];if(o){t.name=o.name;t.desc=o.desc;}}
+  if(typeof PREM_TOWERS!=='undefined')for(const t of PREM_TOWERS){const o=P.towers[t.id];if(o){t.name=o.name;t.desc=o.desc;}}
   for(const t of TROOPS){const o=P.troops[t.id];if(o){t.name=o.name;t.desc=o.desc;}}
   for(const h of HEROES){
     const o=P.heroes[h.id];if(!o)continue;

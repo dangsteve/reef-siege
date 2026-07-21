@@ -97,6 +97,7 @@ function drawTower(c,t){
   const spr=towerSprite(t.id,lvl);
   c.fillStyle='rgba(0,0,0,0.28)';
   c.beginPath();c.ellipse(t.x,t.y+9,17,7,0,0,7);c.fill();
+  if(t.building){drawBuilding(c,t,def);return;}
   if(spr&&spr.base){
     const SC=0.8; // fit the tile: neighbors no longer overlap
     c.drawImage(spr.base,t.x-spr.ax*SC,t.y-spr.ay*SC,spr.base.width*SC,spr.base.height*SC);
@@ -158,6 +159,68 @@ function drawTower(c,t){
     c.strokeText(t.tier===2?'II':'III',t.x+16,t.y-2);
     c.fillStyle=tc;
     c.fillText(t.tier===2?'II':'III',t.x+16,t.y-2);
+  }
+  if(def.prem)drawPremiumFx(c,t,def);
+}
+function hexToRgb(h){if(h[0]!=='#')return '190,150,255';const n=parseInt(h.slice(1),16);return ((n>>16)&255)+','+((n>>8)&255)+','+(n&255);}
+function drawBuilding(c,t,def){
+  const frac=1-(t.buildLeft/(t.buildTotal||1));
+  c.save();c.translate(t.x,t.y);
+  /* ghost of the tower to come */
+  const spr=towerSprite(t.id,1);
+  c.globalAlpha=0.28;
+  if(spr&&spr.base){const SC=0.8;c.drawImage(spr.base,-spr.ax*SC,-spr.ay*SC,spr.base.width*SC,spr.base.height*SC);}
+  c.globalAlpha=1;
+  /* scaffolding poles */
+  c.strokeStyle='#8a6a3a';c.lineWidth=3;
+  for(const sx of [-14,14]){c.beginPath();c.moveTo(sx,10);c.lineTo(sx,-40);c.stroke();}
+  c.strokeStyle='#a8824a';c.lineWidth=2;
+  for(const yy of [-4,-20,-34]){c.beginPath();c.moveTo(-14,yy);c.lineTo(14,yy);c.stroke();}
+  c.strokeStyle='rgba(168,130,74,0.7)';c.lineWidth=1.6;
+  c.beginPath();c.moveTo(-14,10);c.lineTo(14,-34);c.moveTo(14,10);c.lineTo(-14,-34);c.stroke();
+  /* progress ring */
+  c.beginPath();c.arc(0,-14,20,-Math.PI/2,-Math.PI/2+frac*Math.PI*2);
+  c.strokeStyle=def.hue;c.lineWidth=3.5;c.stroke();
+  c.restore();
+  /* remaining-waves label */
+  c.font='bold 11px Georgia, serif';c.textAlign='center';
+  c.strokeStyle='rgba(0,0,0,0.7)';c.lineWidth=3;
+  const lbl='🔨 '+t.buildLeft+'w';
+  c.strokeText(lbl,t.x,t.y-40);
+  c.fillStyle=def.hue;c.fillText(lbl,t.x,t.y-40);
+}
+function drawPremiumFx(c,t,def){
+  const glowP=0.3+Math.sin(G.time*3+t.x)*0.14;
+  c.save();c.globalCompositeOperation='lighter';
+  c.fillStyle='rgba('+hexToRgb(def.hue)+','+(glowP*0.28)+')';
+  c.beginPath();c.arc(t.x,t.y-16,26,0,7);c.fill();
+  c.globalCompositeOperation='source-over';c.restore();
+  /* a robed mage stands atop the legendary support towers */
+  if(t.id==='pHeal'||t.id==='pStorm'){
+    const bob=Math.sin(G.time*2.5+t.x)*1.5;
+    c.save();c.translate(t.x,t.y-42+bob);
+    c.fillStyle=t.id==='pHeal'?'#3a8a5a':'#5a2a8a';
+    c.beginPath();c.moveTo(-6,8);c.quadraticCurveTo(-7,-6,0,-9);c.quadraticCurveTo(7,-6,6,8);c.closePath();c.fill();c.strokeStyle=OUT;c.lineWidth=1.6;c.stroke();
+    c.fillStyle=t.id==='pHeal'?'#e8c8a0':'#d8c0f0';
+    c.beginPath();c.arc(0,-11,3.2,0,7);c.fill();c.stroke();
+    /* pointed hat */
+    c.fillStyle=t.id==='pHeal'?'#2a6a44':'#3a1a6a';
+    c.beginPath();c.moveTo(-4,-12);c.lineTo(4,-12);c.lineTo(0,-22);c.closePath();c.fill();c.stroke();
+    /* channeling orb */
+    const oc=t.id==='pHeal'?'#7ee0a0':'#c060ff';
+    c.globalCompositeOperation='lighter';
+    c.fillStyle=oc;c.beginPath();c.arc(6,-6,3+Math.sin(G.time*6)*1,0,7);c.fill();
+    c.globalCompositeOperation='source-over';
+    c.restore();
+  }
+  if(t.id==='pShadow'){
+    c.strokeStyle='rgba(140,60,220,'+(0.4+Math.sin(G.time*4)*0.2)+')';c.lineWidth=2;
+    for(let k=0;k<3;k++){const a=G.time*1.5+k*2.1;c.beginPath();c.moveTo(t.x,t.y-34);c.quadraticCurveTo(t.x+Math.cos(a)*22,t.y-46,t.x+Math.cos(a)*30,t.y-30);c.stroke();}
+  }
+  if(t.id==='pGod'){
+    const modes=(typeof GOD_BY!=='undefined'&&t.godMode&&GOD_BY[t.godMode])?GOD_BY[t.godMode]:null;
+    for(let k=0;k<5;k++){const a=G.time*1.1+k*(Math.PI*2/5);const rx=t.x+Math.cos(a)*18,ry=t.y-30+Math.sin(a)*7;c.fillStyle='rgba(255,215,94,'+(0.5+Math.sin(G.time*3+k)*0.3)+')';c.fillRect(rx-1.5,ry-1.5,3,3);}
+    if(modes){c.font='bold 10px Georgia, serif';c.textAlign='center';c.strokeStyle='rgba(0,0,0,0.7)';c.lineWidth=3;c.strokeText(modes.ico+' '+modes.name,t.x,t.y-44);c.fillStyle=modes.col;c.fillText(modes.ico+' '+modes.name,t.x,t.y-44);}
   }
 }
 function drawTowerFallback(c,t,def,lvl){
@@ -373,7 +436,8 @@ function drawEnemy(c,e){
 /* ---------- troops ---------- */
 const TROOP_COLS={militia:'#8a9aa8',archer:'#5d8a4a',sword:'#6a7ca8',spear:'#8a7ca0',xbow:'#4a7a6a',
   berserker:'#b06a3a',knight:'#9aa4c0',mage:'#7a5ac0',cleric:'#e8e0c8',cavalry:'#a8845a',paladin:'#e0d090',giant:'#7a8a90',
-  templar:'#e8ce6a',stormcaller:'#7ab8e8',footman:'#a08a6a',ranger:'#4a8a5a',wargolem:'#8a9098',skeleton:'#cfd8c8'};
+  templar:'#e8ce6a',stormcaller:'#7ab8e8',footman:'#a08a6a',ranger:'#4a8a5a',wargolem:'#8a9098',skeleton:'#cfd8c8',
+  thrall:'#7ec244',aeonchamp:'#ffcf9a'};
 function drawTroop(c,tr){
   const def=TROOP_BY[tr.id],col=TROOP_COLS[tr.id]||'#8aa';
   const s=def.id==='giant'?16:def.id==='wargolem'?15:10;
@@ -840,7 +904,8 @@ function drawFx(c,f){
     c.globalAlpha=1;
   }else if(f.kind==='zap'){
     c.globalCompositeOperation='lighter';
-    c.strokeStyle='rgba(190,150,255,'+Math.max(0,f.life*5)+')';c.lineWidth=3;
+    const zc=f.dark?'120,60,200':(f.col?hexToRgb(f.col):'190,150,255');
+    c.strokeStyle='rgba('+zc+','+Math.max(0,f.life*5)+')';c.lineWidth=3;
     c.beginPath();
     for(let i=0;i<f.pts.length-1;i++){
       const a=f.pts[i],b=f.pts[i+1];
