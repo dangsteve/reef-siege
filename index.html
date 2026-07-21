@@ -157,7 +157,9 @@
   #sideL::-webkit-scrollbar,#sideR::-webkit-scrollbar{display:none;}
   #sideL{left:calc(4px + env(safe-area-inset-left,0px));bottom:44px;}
   #sideR{right:calc(4px + env(safe-area-inset-right,0px));bottom:240px;}
-  body.sidebars #sideL,body.sidebars #sideR{display:flex;}
+  body.sidebars #sideL{display:flex;}
+  body.sidebars #sideR{display:none;}
+  body.sidebars.rail-open #sideR{display:flex;}
   .side-card{flex:0 0 auto;width:56px;background:linear-gradient(180deg,#322a52,#241e3e);
     border:1px solid #4a3f68;border-radius:9px;padding:4px 2px 3px;display:flex;flex-direction:column;
     align-items:center;gap:1px;cursor:pointer;}
@@ -170,11 +172,25 @@
   /* phones with side strips: the bottom dock disappears entirely */
   body.sidebars #dock{display:none;}
   body.sidebars #stage{padding-bottom:0;}
-  body.sidebars #spellbar{flex-direction:column;align-items:center;gap:7px;
-    right:max(6px, calc(env(safe-area-inset-right,0px) + 4px));
+  body.sidebars #spellbar{display:none;flex-direction:column;align-items:center;gap:7px;
+    right:max(56px, calc(env(safe-area-inset-right,0px) + 54px));
     bottom:max(8px, calc(env(safe-area-inset-bottom,0px) + 6px));}
+  body.sidebars.spells-open #spellbar{display:flex;}
   body.sidebars #sideL{bottom:8px;}
-  body.sidebars #sideR{bottom:205px;}
+  body.sidebars #sideR{bottom:56px;}
+  /* floating dropdown toggles (phones only) */
+  .rail-tog{display:none;position:absolute;z-index:9;
+    right:calc(6px + env(safe-area-inset-right,0px));
+    width:46px;height:42px;border-radius:11px;font-size:16px;font-weight:bold;line-height:1;
+    background:linear-gradient(180deg,#453c68,#332b50);color:#ffd75e;border:1px solid #5d5288;
+    align-items:center;justify-content:center;gap:1px;box-shadow:0 2px 7px rgba(0,0,0,0.55);}
+  .rail-tog .tog-caret{font-size:9px;opacity:0.85;}
+  body.sidebars #railTog{display:flex;bottom:calc(100px + env(safe-area-inset-bottom,0px));}
+  body.sidebars #spellTog{display:flex;bottom:calc(50px + env(safe-area-inset-bottom,0px));}
+  body.sidebars.rail-open #railTog{background:linear-gradient(180deg,#8a63d8,#6a48b0);color:#fff;}
+  body.sidebars.rail-open #railTog .tog-caret{transform:rotate(90deg);display:inline-block;}
+  body.sidebars.spells-open #spellTog{background:linear-gradient(180deg,#8a63d8,#6a48b0);color:#fff;}
+  body.sidebars.spells-open #spellTog .tog-caret{transform:rotate(180deg);display:inline-block;}
   /* targeting chips */
   .tgt-chip{font-size:9px;color:#9ad4ff;background:rgba(20,16,32,0.6);border:1px solid #3d3758;
     padding:0 6px;border-radius:8px;line-height:1.5;}
@@ -316,7 +332,8 @@
   .prem-card.cant{opacity:0.55;}
   body.sidebars #spellbar .spell-btn{width:44px;height:44px;}
   body.sidebars #spellbar .spell-btn.ult{width:50px;height:50px;}
-  body.sidebars #spellbar{gap:5px;max-height:82vh;flex-wrap:wrap;}
+  body.sidebars.spells-open #spellbar{gap:6px;max-height:calc(100vh - 74px);overflow-y:auto;scrollbar-width:none;padding:2px;}
+  body.sidebars #spellbar::-webkit-scrollbar{display:none;}
   .card.tier-silver{border-color:#c8ccd8;box-shadow:0 0 10px rgba(200,204,216,0.35);}
   .card.tier-gold{border-color:#ffd75e;box-shadow:0 0 12px rgba(255,215,94,0.45);}
   .hero-card.divine{border-color:#ff5a4e!important;box-shadow:0 0 16px rgba(255,90,70,0.55)!important;
@@ -358,6 +375,8 @@
   body.reef .spell-btn{background:radial-gradient(circle at 35% 30%,#164a58,#0e303c);border-color:#2a7482;}
   body.reef .side-card{background:linear-gradient(180deg,#12404e,#0e303c);border-color:#1e5a66;}
   body.reef .side-card.mgmt{background:linear-gradient(180deg,#164a58,#0f3a46);}
+  body.reef .rail-tog{background:linear-gradient(180deg,#164a58,#0f3a46);border-color:#2a7482;}
+  body.reef.sidebars.rail-open #railTog,body.reef.sidebars.spells-open #spellTog{background:linear-gradient(180deg,#2fc2b4,#1e8a80);}
   body.reef .tgt-chip{border-color:#16444e;}
   body.reef #mobilePanel{background:linear-gradient(180deg,#0f3242,#0b2634);border-color:#2fc2b4;}
   body.reef .mp-tab{color:#8fb8b4;background:#0a2430;border-color:#1e5a66;}
@@ -404,6 +423,8 @@
     <div id="spellbar"></div>
     <div id="sideL"></div>
     <div id="sideR"></div>
+    <button id="railTog" class="rail-tog" title="Upgrades, heroes & rally">🛠<span class="tog-caret">▸</span></button>
+    <button id="spellTog" class="rail-tog" title="Battle spells">✦<span class="tog-caret">▴</span></button>
   </div>
   <div id="dock">
     <div id="dockbar">

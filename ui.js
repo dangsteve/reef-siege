@@ -247,6 +247,9 @@ function bindHud(){
   bindMobilePanel();
   $('btnDock').onclick=()=>setDock($('dockbody').style.display==='none');
   $('btnRally').onclick=()=>{UIS.mode='rally';UIS.selTower=null;if(G)G.targetMode=null;setCursorHint('Click near a road to set that road’s rally point');};
+  const rt=$('railTog'),spt=$('spellTog');
+  if(rt)rt.onclick=()=>{const b=document.body;b.classList.remove('spells-open');b.classList.toggle('rail-open');SFXp('ui_click');};
+  if(spt)spt.onclick=()=>{const b=document.body;b.classList.remove('rail-open');b.classList.toggle('spells-open');SFXp('ui_click');};
   const bz=$('btnBlitz');
   if(bz)bz.onclick=()=>{
     if(!G||G.over)return;
@@ -493,7 +496,7 @@ function refreshSideBars(){
   });
 }
 function updateSidebarsVisible(){
-  if(!started||!IS_TOUCH){document.body.classList.remove('sidebars');return;}
+  if(!started||!IS_TOUCH){document.body.classList.remove('sidebars','rail-open','spells-open');return;}
   const r=canvas.getBoundingClientRect();
   const scale=Math.min(r.width/CFG.W,r.height/CFG.H);
   const band=(r.width-CFG.W*scale)/2;
