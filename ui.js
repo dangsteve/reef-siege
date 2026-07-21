@@ -50,7 +50,7 @@ window.addEventListener('DOMContentLoaded',()=>{
   showMapSelect();
   requestAnimationFrame(frame);
   setInterval(bgTick,250);
-  setInterval(()=>{if(started&&G&&!G.over)refreshCards();},300);
+  setInterval(()=>{if(started&&G&&!G.over&&!G.villain)refreshCards();},300);
   document.addEventListener('pointerdown',()=>{
     try{if(typeof Music!=='undefined')Music.init();}catch(err){}
   },{passive:true});
@@ -80,6 +80,13 @@ let lastF=performance.now();
 function frame(now){
   const dt=Math.min(0.1,(now-lastF)/1000);
   lastF=now;
+  if(started&&G&&G.villain){
+    villainStep(dt);
+    drawVillain(ctx);
+    refreshVillainHud();
+    try{if(typeof Music!=='undefined'){const boss=G.enemies.some(e=>e.boss);Music.setIntensity(G.over?'calm':boss?'boss':'battle');Music.update(dt);}}catch(err){}
+    requestAnimationFrame(frame);return;
+  }
   if(started&&G){
     stepSim(dt);
     if(G.blitz>0&&!G.over&&!G.paused){
@@ -107,7 +114,7 @@ function bgTick(){
   const dt=Math.min(1,(now-lastBg)/1000);
   lastBg=now;
   if(document.hidden&&started&&G){
-    stepSim(dt);
+    if(G.villain)villainStep(dt);else stepSim(dt);
     try{if(typeof Music!=='undefined')Music.update(dt);}catch(err){}
   }
 }
@@ -139,6 +146,7 @@ function pathPreview(mdef,w,h){
 }
 function showMapSelect(){
   started=false;
+  document.body.classList.remove('villain');
   const ov=$('overlay');
   const diffCol={Easy:'#6ad06a',Medium:'#e8c93a',Hard:'#e05a5a'};
   const TX=(typeof THEME!=='undefined'&&THEME.txt)?THEME.txt:{h1:'Castle Siege',h2:'Endless Defense',lore:'Choose your battlefield, commander.',themeBtn:'🪸 Switch theme'};
@@ -156,6 +164,8 @@ function showMapSelect(){
       (hasSave(m.id)?'<button class="small-btn" data-cont="'+m.id+'">▶ Continue</button>':'')+
       '<button class="small-btn gold" data-new="'+m.id+'">✦ New</button>'+
       (vaultPeak(m.id)?'<button class="small-btn peak" data-peak="'+m.id+'" title="Restart at wave 1 with your best-ever heroes, relics, troop levels and a rebuild budget">⭐ Peak (W'+vaultPeak(m.id).wave+')</button>':'')+
+      '<button class="small-btn villbtn" data-vill="'+m.id+'" title="VILLAIN MODE: you are the besieger — flood creeps at an AI Citadel">😈 '+(vHasSave(m.id)?'Villain ▶':'Villain')+'</button>'+
+      (vBestWave(m.id)?'<div class="map-best" style="color:#c060ff">😈 Siege best: W'+vBestWave(m.id)+'</div>':'')+
       '</div></div>';
   }
   html+='</div><p class="hint-line">Towers auto-fight • your army auto-resummons • progress autosaves every wave.<br>Built for leaving open while you work.</p>'+
@@ -170,6 +180,8 @@ function showMapSelect(){
     if(cb)cb.onclick=()=>beginRun(m.id,true);
     const pb=ov.querySelector('[data-peak="'+m.id+'"]');
     if(pb)pb.onclick=()=>{try{localStorage.removeItem('rs2_save_'+m.id);}catch(err){};beginRun(m.id,false,true);};
+    const vb=ov.querySelector('[data-vill="'+m.id+'"]');
+    if(vb)vb.onclick=()=>beginVillain(m.id,vHasSave(m.id));
   }
   const tb=ov.querySelector('#btnTheme');
   if(tb)tb.onclick=()=>{
@@ -185,6 +197,7 @@ function showMapSelect(){
 function beginRun(mapId,cont,peak){
   $('overlay').style.display='none';
   delete bgCache[mapId];
+  document.body.classList.remove('villain');
   if(peak)startPeakRun(mapId);
   else if(!cont||!loadGame(mapId))newGame(mapId);
   started=true;
@@ -194,6 +207,167 @@ function beginRun(mapId,cont,peak){
   closeMobilePanel();
   SFXp('horn_wave');
   if(!cont&&G&&!G.spun)showWheel();
+}
+
+/* ================= VILLAIN MODE UI ================= */
+function beginVillain(mapId,cont){
+  $('overlay').style.display='none';
+  delete bgCache[mapId];
+  document.body.classList.add('villain');
+  if(!cont||!vLoadGame(mapId))newVillain(mapId);
+  started=true;
+  UIS.mode='none';UIS.buildType=null;UIS.selBarr=null;UIS.pendC=-1;UIS.pendR=-1;
+  buildVillainDock();
+  hideTowerDetail();setCursorHint('');closeMobilePanel();
+  if(G.bossPending)showBossSelect();
+  SFXp('horn_wave');
+}
+function refreshVillainHud(){
+  $('stGold').textContent=fmt(G.dp);
+  $('stLives').textContent=G.lives;
+  $('stWave').textContent=G.wave+(G.wave%10===0?' 💀':'');
+  const sp=$('spdCycle');if(sp){sp.textContent=G.speed+'×';sp.classList.toggle('active',G.speed>1);}
+  for(const s of [1,2,3]){const b=$('spd'+s);if(b)b.classList.toggle('active',G.speed===s);}
+  $('btnPause').textContent=G.paused?'▶':'⏸';
+  refreshVillainDock();
+}
+function buildVillainDock(){
+  const box=$('vBarrCards');box.innerHTML='';
+  for(const def of VTROOPS){
+    const d=document.createElement('div');
+    d.className='card v-card';d.id='vc-'+def.id;d.dataset.vid=def.id;d.title=def.desc;
+    d.innerHTML='<div class="card-icon" id="vci-'+def.id+'"></div>'+
+      '<div class="card-name">'+vName(def)+'</div>'+
+      '<div class="tgt-chip" style="color:'+V_TIER_COL[def.tier]+'">✦ '+def.tier+'</div>'+
+      '<div class="troop-stats" id="vcs-'+def.id+'"></div>'+
+      '<div class="card-cost" id="vcc-'+def.id+'">'+def.bcost+' DP</div>'+
+      '<div class="lock-cover" id="vlk-'+def.id+'">🔒 W'+def.unlock+'</div>';
+    d.onclick=()=>villainSelectBuild(def);
+    box.appendChild(d);
+  }
+  const up=$('vUpCards');up.innerHTML='';
+  for(const u of V_UPGR){
+    const d=document.createElement('div');
+    d.className='card v-up-card';d.id='vu-'+u.id;
+    d.innerHTML='<div class="card-icon big" style="font-size:26px">'+u.ico+'</div>'+
+      '<div class="card-name">'+u.name+' <span class="lvl-badge" id="vul-'+u.id+'"></span></div>'+
+      '<div class="troop-stats rdesc">'+u.desc+'</div>'+
+      '<button class="small-btn gold" id="vub-'+u.id+'"></button>';
+    up.appendChild(d);
+    $('vub-'+u.id).onclick=()=>{if(vBuyUpgrade(u.id))refreshVillainDock();};
+  }
+  $('vtab-barr').onclick=()=>villainTab('barr');
+  $('vtab-up').onclick=()=>villainTab('up');
+  $('vBossBtn').onclick=()=>{if(G.bossPending)showBossSelect();};
+  $('vDock').onclick=()=>{const b=$('vdBody');b.style.display=b.style.display==='none'?'flex':'none';$('vDock').textContent=b.style.display==='none'?'▲':'▼';};
+  setTimeout(()=>{for(const def of VTROOPS)villainIcon(def);},0);
+  villainTab('barr');
+  refreshVillainDock();
+}
+function villainIcon(def){
+  const el=$('vci-'+def.id);if(!el)return;
+  const cv=document.createElement('canvas');cv.width=40;cv.height=42;
+  const g=cv.getContext('2d');g.translate(20,26);
+  const e={def:{kind:def.kind,col:def.col,fly:def.fly,armor:def.armor},x:0,y:0,
+    size:Math.min(13,def.size),anim:1.2,rarity:def.tier==='legendary'?'champ':null,boss:false,slowP:0,flash:0};
+  try{drawEnemy(g,e);}catch(err){}
+  el.innerHTML='';el.appendChild(cv);
+}
+function refreshVillainDock(){
+  if(!G||!G.villain)return;
+  const dp=$('vdDp');if(dp)dp.textContent=fmt(G.dp);
+  const rt=$('vdRate');if(rt)rt.textContent=Math.round(vDpRate());
+  for(const def of VTROOPS){
+    const locked=def.unlock>G.wave;
+    const lk=$('vlk-'+def.id);if(lk)lk.style.display=locked?'flex':'none';
+    const el=$('vc-'+def.id);if(el)el.classList.toggle('cant',locked||G.dp<def.bcost);
+    if(!locked){const st=vCreepStat(def,0);const cs=$('vcs-'+def.id);if(cs)cs.textContent='⚔ '+fmt(st.dmg)+' ❤ '+fmt(st.hp);}
+  }
+  for(const u of V_UPGR){
+    const l=$('vul-'+u.id);if(l)l.textContent='Lv '+(G.up[u.id]||0);
+    const c=vUpCost(u.id);const b=$('vub-'+u.id);if(b){b.textContent='Buy '+fmt(c)+' DP';b.disabled=G.dp<c;}
+  }
+  const bb=$('vBossBtn');if(bb)bb.style.display=G.bossPending?'inline-block':'none';
+}
+function villainSelectBuild(def){
+  if(def.unlock>G.wave){setBanner(vName(def)+' unlocks at Wave '+def.unlock);SFXp('ui_click');return;}
+  if(UIS.mode==='vbuild'&&UIS.buildType===def.id){villainCancelBuild();return;}
+  UIS.mode='vbuild';UIS.buildType=def.id;UIS.selBarr=null;UIS.pendC=-1;UIS.pendR=-1;
+  syncVillainSel();hideTowerDetail();
+  setCursorHint(IS_TOUCH?'Tap twice to raise the barracks':'Double-click to raise the barracks');
+  SFXp('ui_click');
+}
+function syncVillainSel(){
+  document.querySelectorAll('#vBarrCards .card').forEach(x=>x.classList.toggle('selected',UIS.mode==='vbuild'&&x.dataset.vid===UIS.buildType));
+}
+function villainCancelBuild(){
+  UIS.mode='none';UIS.buildType=null;UIS.pendC=-1;UIS.pendR=-1;clearPending();syncVillainSel();setCursorHint('');
+}
+function villainTab(t){
+  $('vtab-barr').classList.toggle('active',t==='barr');
+  $('vtab-up').classList.toggle('active',t==='up');
+  $('vpane-barr').style.display=t==='barr'?'flex':'none';
+  $('vpane-up').style.display=t==='up'?'flex':'none';
+  SFXp('ui_tab');
+}
+function villainCanvasClick(p,c,r){
+  if(UIS.mode==='vbuild'){
+    if(UIS.justPlacedGhost){UIS.justPlacedGhost=false;return;}
+    if(UIS.pendC===c&&UIS.pendR===r){
+      if(vPlaceBarracks(UIS.buildType,c,r)){
+        clearPending();setCursorHint('');refreshVillainDock();
+        if(G.dp<VTROOP_BY[UIS.buildType].bcost)villainCancelBuild();
+      }else setCursorHint(vCanBuildBarracks(UIS.buildType,c,r)?'':'Blocked tile or not enough DP');
+    }else{
+      UIS.pendC=c;UIS.pendR=r;UIS.hoverC=c;UIS.hoverR=r;
+      setCursorHint(vCanBuildBarracks(UIS.buildType,c,r)?(IS_TOUCH?'Tap again to build':'Click again to build'):'Blocked tile / not enough DP');
+    }
+    return;
+  }
+  const b=G.barracks.find(x=>x.c===c&&x.r===r);
+  if(b){villainBarracksDetail(b);SFXp('ui_click');}
+  else{hideTowerDetail();UIS.selBarr=null;}
+}
+function villainBarracksDetail(b){
+  UIS.selBarr=b;
+  const def=VTROOP_BY[b.id],box=$('towerDetail');
+  const st=vCreepStat(def,b.lvl),up=vBarracksUpCost(b);
+  box.innerHTML='<div class="td-head">'+vName(def)+' Barracks <span class="lvl-badge">Lv '+b.lvl+'</span>'+
+    '<button class="x-btn" id="btnTdClose">✕</button></div>'+
+    '<div class="td-stats"><span style="color:'+V_TIER_COL[def.tier]+'">✦ '+def.tier+'</span><span>⚔ '+fmt(st.dmg)+'</span><span>❤ '+fmt(st.hp)+'</span><span>⏱ '+(def.cd/(1+b.lvl*0.14)).toFixed(1)+'s</span></div>'+
+    '<div class="btn-row"><button class="small-btn gold" id="vbUp">⬆ '+fmt(up)+' DP</button>'+
+    '<button class="small-btn danger" id="vbSell">Sell +'+fmt(Math.round(def.bcost*0.5))+'</button></div>';
+  box.style.display='block';positionTowerDetail(b);
+  $('vbUp').onclick=()=>{if(vUpgradeBarracks(b)){villainBarracksDetail(b);refreshVillainDock();}};
+  $('vbSell').onclick=()=>{vSellBarracks(b);hideTowerDetail();UIS.selBarr=null;refreshVillainDock();};
+  $('btnTdClose').onclick=()=>{hideTowerDetail();UIS.selBarr=null;};
+}
+function showBossSelect(){
+  const ov=$('overlay');
+  let html='<div class="panel-box start-box"><h1>💀 Choose Your Champion</h1><h2>Wave '+G.wave+' — Boss Fortress</h2>'+
+    '<p class="lore">Unleash one boss upon the Citadel this wave.</p><div class="map-row">';
+  const avail=VBOSSES.filter(x=>x.unlock<=G.wave);
+  for(const b of avail){
+    html+='<div class="map-card"><div class="map-name">'+vName(b)+'</div>'+
+      '<div class="map-diff" style="color:'+V_TIER_COL[b.tier]+'">✦ '+b.tier+'</div>'+
+      '<div class="map-desc">❤ '+fmt(b.hp)+' · ⚔ '+fmt(b.dmg)+(b.fly?' · ✈ flies':'')+(b.regen?' · ♻ regen':'')+(b.summons?' · 👹 summons':'')+'</div>'+
+      '<div class="btn-row"><button class="small-btn gold" data-boss="'+b.id+'">💀 Unleash</button></div></div>';
+  }
+  html+='</div><p class="hint-line">Bigger bosses hit the Citadel far harder — but the fortress is tougher on boss waves.</p></div>';
+  ov.innerHTML=html;ov.style.display='flex';
+  ov.querySelectorAll('[data-boss]').forEach(btn=>btn.onclick=()=>{ov.style.display='none';vSelectBoss(btn.dataset.boss);});
+}
+function onVillainWave(){if(G&&G.bossPending)showBossSelect();refreshVillainDock();}
+function onVillainOver(){
+  const ov=$('overlay');
+  ov.innerHTML='<div class="panel-box start-box"><h1>🛡 The Citadel Held</h1>'+
+    '<p class="lore">Your siege of '+MAP.def.name+' was broken at <b>Wave '+G.wave+'</b>.</p>'+
+    '<p class="stats-line">💀 Dread Score: '+fmt(G.score)+'</p>'+
+    '<div class="btn-row"><button class="big-btn" id="btnVRetry">⟲ Besiege Again</button>'+
+    '<button class="big-btn alt" id="btnVMaps">🗺 Menu</button></div></div>';
+  ov.style.display='flex';
+  $('btnVRetry').onclick=()=>beginVillain(G.mapId,false);
+  $('btnVMaps').onclick=showMapSelect;
 }
 function onGameOver(){
   const ov=$('overlay');
@@ -231,7 +405,7 @@ function bindHud(){
     refreshAudioBtns();
   };
   $('btnHelp').onclick=toggleHelp;
-  $('btnMenu').onclick=()=>{if(G&&!G.over)saveGame();showMapSelect();};
+  $('btnMenu').onclick=()=>{if(G&&!G.over){if(G.villain)vSaveGame();else saveGame();}showMapSelect();};
   $('helpOverlay').onclick=e=>{if(e.target.id==='helpOverlay')toggleHelp();};
   $('btnCloseHelp').onclick=toggleHelp;
   $('btnWave').onclick=()=>{
@@ -496,7 +670,7 @@ function refreshSideBars(){
   });
 }
 function updateSidebarsVisible(){
-  if(!started||!IS_TOUCH){document.body.classList.remove('sidebars','rail-open','spells-open');return;}
+  if(!started||!IS_TOUCH||(G&&G.villain)){document.body.classList.remove('sidebars','rail-open','spells-open');return;}
   const r=canvas.getBoundingClientRect();
   const scale=Math.min(r.width/CFG.W,r.height/CFG.H);
   const band=(r.width-CFG.W*scale)/2;
@@ -1116,6 +1290,7 @@ function bindCanvas(){
     const p=canvasPos(ev);
     if(p.x<0||p.y<0||p.x>CFG.W||p.y>CFG.H)return;
     const c=Math.floor(p.x/CFG.CELL),r=Math.floor(p.y/CFG.CELL);
+    if(G.villain){villainCanvasClick(p,c,r);return;}
     if(G.targetMode&&G.targetMode.indexOf('spell:')===0){
       spellAt(G.targetMode.slice(6),p.x,p.y);
       setCursorHint('');refreshCards();return;
@@ -1188,6 +1363,12 @@ function bindCanvas(){
 function bindKeys(){
   window.addEventListener('keydown',ev=>{
     if(!started||!G)return;
+    if(G.villain){
+      if(ev.key==='Escape'){villainCancelBuild();hideTowerDetail();UIS.selBarr=null;}
+      else if(ev.key===' '){ev.preventDefault();G.paused=!G.paused;}
+      else if(ev.key==='f'||ev.key==='F'){G.speed=G.speed>=3?1:G.speed+1;}
+      return;
+    }
     if(ev.key==='Escape'){cancelMode();UIS.mode='none';UIS.selTower=null;UIS.selWall=null;hideTowerDetail();setCursorHint('');closeMobilePanel();return;}
     if(G.over)return;
     else if(ev.key===' '){ev.preventDefault();G.paused=!G.paused;}
