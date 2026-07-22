@@ -2376,6 +2376,43 @@ const SpriteLib = (function () {
       g.fillStyle = '#ffd75e'; g.beginPath(); g.arc(20, 17, 3, 0, 7); g.fill();
       g.beginPath(); g.arc(13, 5, 2.4, 0, 7); g.fillStyle = '#e8c34a'; g.fill();
     },
+    curse: function (g) { // hex skull
+      glow(g, 22, 22, 15, '#b05adf', 0.5);
+      g.fillStyle = '#e6d6ff';
+      g.beginPath(); g.arc(22, 20, 10, Math.PI, 0); g.lineTo(30, 30); g.lineTo(14, 30); g.closePath(); g.fill(); outl(g, 2);
+      g.fillStyle = '#2a1830'; g.beginPath(); g.arc(18, 20, 2.4, 0, 7); g.arc(26, 20, 2.4, 0, 7); g.fill();
+      g.fillStyle = '#b05adf'; g.beginPath(); g.arc(18, 20, 1.1, 0, 7); g.arc(26, 20, 1.1, 0, 7); g.fill();
+      g.strokeStyle = '#2a1830'; g.lineWidth = 1.4;
+      g.beginPath(); g.moveTo(19, 27); g.lineTo(21, 30); g.lineTo(23, 27); g.lineTo(25, 30); g.stroke();
+    },
+    zombie: function (g) { // clawing green hand
+      glow(g, 22, 24, 13, '#7ec244', 0.4);
+      g.fillStyle = '#6a8a4a'; g.strokeStyle = OUT; g.lineWidth = 2; g.lineCap = 'round';
+      rr(g, 18, 22, 8, 16, 3); g.fill(); g.beginPath(); rr(g, 18, 22, 8, 16, 3); g.stroke();
+      g.strokeStyle = '#5a7a3a'; g.lineWidth = 5;
+      for (const dx of [-6, -2, 2, 6]) { g.beginPath(); g.moveTo(22 + dx, 22); g.lineTo(22 + dx, 8); g.stroke(); }
+      g.strokeStyle = OUT; g.lineWidth = 1.6;
+      for (const dx of [-6, -2, 2, 6]) { g.beginPath(); g.moveTo(22 + dx, 22); g.lineTo(22 + dx, 9); g.stroke(); }
+    },
+    berserk: function (g) { // raging fanged maw
+      glow(g, 22, 22, 15, '#ff4a4a', 0.55);
+      g.fillStyle = '#c8304a';
+      g.beginPath(); g.arc(22, 22, 12, 0, 7); g.fill(); outl(g, 2.2);
+      g.fillStyle = '#2a0a12';
+      g.beginPath(); g.ellipse(22, 25, 8, 4.5, 0, 0, 7); g.fill();
+      g.fillStyle = '#fff';
+      for (const dx of [-6, -2, 2, 6]) { g.beginPath(); g.moveTo(dx + 22, 22); g.lineTo(dx + 24, 28); g.lineTo(dx + 20, 28); g.closePath(); g.fill(); }
+      g.fillStyle = '#ffd75e'; g.beginPath(); g.arc(17, 18, 2, 0, 7); g.arc(27, 18, 2, 0, 7); g.fill();
+    },
+    apocalypse: function (g) { // burning meteor skull
+      glow(g, 22, 22, 18, '#ff5a2a', 0.6);
+      g.fillStyle = '#ff7a3a';
+      g.beginPath(); g.arc(23, 22, 11, 0, 7); g.fill(); outl(g, 2.2);
+      g.fillStyle = '#3a1408'; g.beginPath(); g.arc(19, 21, 2.4, 0, 7); g.arc(27, 21, 2.4, 0, 7); g.fill();
+      g.fillStyle = '#ffd75e'; g.beginPath(); g.arc(19, 21, 1.1, 0, 7); g.arc(27, 21, 1.1, 0, 7); g.fill();
+      g.strokeStyle = '#ffe86a'; g.lineWidth = 2; g.lineCap = 'round';
+      for (const a of [-2.4, -1.9, -1.3]) { g.beginPath(); g.moveTo(23 + Math.cos(a) * 11, 22 + Math.sin(a) * 11); g.lineTo(23 + Math.cos(a) * 20, 22 + Math.sin(a) * 20); g.stroke(); }
+    },
     ragnarok: function (g) { // ultimate: storm-wreathed rune bolt
       glow(g, 22, 22, 18, '#8ad0ff', 0.55);
       // dark storm ring

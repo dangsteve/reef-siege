@@ -61,6 +61,21 @@ const V_UPGR=[
  {id:'tribute', name:'Dread Tribute', ico:'💀', desc:'More Dread Points per second.'},
 ];
 
+/* ---------- EVIL SPELLS (free, cooldown-based) ---------- */
+const V_SPELLS=[
+ {id:'curse',  name:'Curse of Ruin', icon:'curse', cd:38, target:true, radius:135,
+  desc:'Hex the defenses: struck towers fall silent for 6s and the Citadel takes bonus damage.'},
+ {id:'zombie', name:'Raise the Dead', icon:'zombie', cd:52, target:false,
+  desc:'A horde of rotting zombies claws up at your spawn and marches on the Citadel.'},
+ {id:'berserk',name:'Bloodrage', icon:'berserk', cd:44, target:false, dur:8,
+  desc:'Your whole horde goes berserk — +80% damage and +60% speed for 8 seconds.'},
+ {id:'apocalypse', name:'END OF THE WORLD', icon:'apocalypse', cd:300, target:false,
+  desc:'The sky burns: cripples EVERY defender tower for 14s, cracks the Citadel wide open, and raises a legion.'},
+];
+const V_SPELL_BY={};V_SPELLS.forEach(s=>V_SPELL_BY[s.id]=s);
+/* hidden zombie creep — summoned by Raise the Dead / Apocalypse only */
+VTROOP_BY.zombie={id:'zombie',name:'Zombie',tier:'rare',kind:'',col:'#6a8a5a',fly:false,size:12,hp:240,dmg:28,speed:56,armor:0.1,cost:0,cd:0,bcost:0,unlock:1};
+
 /* ================= math ================= */
 function vScale(w){return Math.pow(1.24,w-1);}          // defence / citadel growth
 function vDpRate(){return 11+(G.up.tribute||0)*5+G.wave*0.6;}
@@ -86,6 +101,7 @@ function newVillain(mapId){
     enemies:[], towers:[], troops:[], heroes:[], walls:[], projs:[], parts:[], texts:[], fx:[], zones:[], chest:null,
     rally:MAP.P.map(p=>p.total*0.5),
     barracks:[], up:{might:0,vigor:0,tribute:0},
+    vspells:{curse:6,zombie:8,berserk:6,apocalypse:120}, berserkT:0,
     citadelHp:0, citadelMax:0, siegeT:0, siegeMax:0, hitFlash:0,
     defBuildT:6, surgeT:rnd(8,16), intermission:0, waveActive:false,
     bossPending:false, bossThisWave:null,
@@ -136,6 +152,8 @@ function vSub(dt){
   if(G.bannerT>0)G.bannerT-=dt;
   if(G.shake>0)G.shake=Math.max(0,G.shake-dt*30);
   if(G.hitFlash>0)G.hitFlash-=dt;
+  for(const s of V_SPELLS)if(G.vspells[s.id]>0)G.vspells[s.id]-=dt;
+  if(G.berserkT>0)G.berserkT-=dt;
   if(!G.waveActive)return;
 
   G.dp+=vDpRate()*dt;
@@ -205,7 +223,7 @@ function vUpdateCreeps(dt){
       e.sumT=(e.sumT||rnd(2,5))-dt;
       if(e.sumT<=0){e.sumT=rnd(3,6);vSpawnCreep('imp',0,{pi:e.pi,d:Math.max(6,e.d-20)});}
     }
-    e.d+=e.speed*(1-e.slowP)*dt;
+    e.d+=e.speed*(1-e.slowP)*(G.berserkT>0?1.6:1)*dt;
     const total=MAP.P[e.pi].total;
     if(e.d>=total-10){vBreach(e);continue;}
     const p=posAt(e.pi,e.d);
@@ -217,7 +235,7 @@ function vUpdateCreeps(dt){
 
 function vBreach(e){
   e.dead=true;
-  const dmg=e.dmg*(e.def.blast?2.2:1)*(e.boss?1:1);
+  const dmg=e.dmg*(e.def.blast?2.2:1)*(G.berserkT>0?1.8:1);
   G.citadelHp-=dmg;
   G.hitFlash=0.25;G.citLock=2.5;
   G.shake=Math.max(G.shake,e.boss?9:e.def.blast?5:2);
@@ -302,6 +320,7 @@ function vDefenderFire(dt){
   for(const t of G.towers){
     const def=TOWER_BY[t.id];
     if(!def||!def.range)continue;
+    if(t.silenceT>0){t.silenceT-=dt;continue;}
     t.cd-=dt;
     if(t.cd>0)continue;
     const st=towerStat(def,t.lvl);
@@ -415,6 +434,49 @@ function vBuyUpgrade(track){
   return true;
 }
 
+/* ---------- evil spells ---------- */
+function vCastSpell(id){
+  const def=V_SPELL_BY[id];
+  if(!def||G.over||G.bossPending||(G.vspells[id]||0)>0)return false;
+  if(def.target){G.targetMode='vspell:'+id;return true;}
+  G.vspells[id]=def.cd;
+  if(id==='zombie'){
+    for(let i=0;i<12;i++)vSpawnCreep('zombie',0,{pi:Math.floor(Math.random()*MAP.P.length),d:rnd(0,16)});
+    setBanner('🧟 The dead rise! A zombie horde claws forth!',true);
+    G.shake=Math.max(G.shake,6);SFXp('boss_roar');
+  }else if(id==='berserk'){
+    G.berserkT=def.dur;
+    for(const e of G.enemies)addFx({kind:'ring',x:e.x,y:e.y,r:4,maxR:e.size*2.4,life:0.35,col:'#ff4a4a'});
+    setBanner('🩸 BLOODRAGE! Your whole horde goes berserk!',true);SFXp('skill_warcry');
+  }else if(id==='apocalypse'){
+    for(const t of G.towers)t.silenceT=Math.max(t.silenceT||0,14);
+    G.citadelHp-=G.citadelMax*0.4;G.citLock=2.5;G.hitFlash=0.45;G.shake=18;
+    const pool=['brute','troll','golem'].filter(x=>VTROOP_BY[x]);
+    for(let i=0;i<16;i++)vSpawnCreep(pick(pool),0,{pi:Math.floor(Math.random()*MAP.P.length),d:rnd(0,22)});
+    addFx({kind:'ragnarok',life:1.8,t:0});
+    const cp=vCitadelPos();addFx({kind:'firestorm',x:cp.x-10,y:cp.y,r:120,life:1.1,t:0});
+    setBanner('☄️ END OF THE WORLD! The heavens fall upon the Citadel!',true);SFXp('boss_die');
+  }
+  return true;
+}
+function vSpellAt(id,x,y){
+  const def=V_SPELL_BY[id];
+  if(!def||(G.vspells[id]||0)>0)return false;
+  G.targetMode=null;G.vspells[id]=def.cd;
+  if(id==='curse'){
+    let n=0;
+    for(const t of G.towers){
+      if(dist2(t.x,t.y,x,y)<def.radius*def.radius){t.silenceT=Math.max(t.silenceT||0,6);n++;addFx({kind:'ring',x:t.x,y:t.y,r:6,maxR:34,life:0.5,col:'#b05adf'});}
+    }
+    G.citadelHp-=G.citadelMax*0.05;G.citLock=2.5;G.hitFlash=0.2;
+    addFx({kind:'ring',x,y,r:16,maxR:def.radius,life:0.7,col:'#b05adf'});
+    burst(x,y,20,'#b05adf');
+    setBanner('🟣 Curse of Ruin — '+n+' tower'+(n===1?'':'s')+' silenced!');
+    G.shake=Math.max(G.shake,5);SFXp('skill_shadow');
+  }
+  return true;
+}
+
 /* ---------- persistence ---------- */
 function vSaveKey(){return 'rs2_vsave_'+G.mapId;}
 function vBestKey(){return 'rs2_vbest_'+G.mapId;}
@@ -470,6 +532,14 @@ function drawVillain(c){
     c.fillRect(x,y,CFG.CELL,CFG.CELL);
     c.strokeStyle=ok?'rgba(120,230,140,0.95)':'rgba(230,90,90,0.95)';c.lineWidth=2.5;
     c.strokeRect(x+2,y+2,CFG.CELL-4,CFG.CELL-4);
+  }
+  /* evil spell target reticle */
+  if(G.targetMode&&G.targetMode.indexOf('vspell:')===0&&UIS.hoverX>=0){
+    const sd=V_SPELL_BY[G.targetMode.slice(7)];
+    const rr=sd&&sd.radius?sd.radius:120;
+    c.strokeStyle='rgba(180,80,220,0.85)';c.lineWidth=2;c.setLineDash([8,6]);
+    c.beginPath();c.arc(UIS.hoverX,UIS.hoverY,rr,0,7);c.stroke();c.setLineDash([]);
+    c.fillStyle='rgba(180,80,220,0.12)';c.beginPath();c.arc(UIS.hoverX,UIS.hoverY,rr,0,7);c.fill();
   }
 
   /* y-sorted: towers + barracks + creeps */

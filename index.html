@@ -326,8 +326,14 @@
   #villainDock{display:none;flex-direction:column;background:linear-gradient(180deg,#2a1230,#170a1e);
     border-top:1px solid #7a2a6a;box-shadow:0 -2px 10px rgba(0,0,0,0.55);z-index:5;}
   body.villain #villainDock{display:flex;}
-  body.villain #dock,body.villain #spellbar,body.villain #sideL,body.villain #sideR,
-  body.villain #railTog,body.villain #spellTog{display:none!important;}
+  body.villain #dock{display:none!important;}
+  body.villain.sidebars #villainDock{display:none!important;}
+  .side-card{position:relative;}
+  .sc-lock{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+    background:rgba(16,10,24,0.78);border-radius:9px;font-size:9px;color:#c8a0e0;font-weight:bold;}
+  .spell-btn.evil.ready{border-color:#c060ff;box-shadow:0 0 12px rgba(192,96,255,0.6),0 3px 10px rgba(0,0,0,0.55);}
+  .spell-btn.evil.ult.ready{border-color:#ff5a4e;box-shadow:0 0 16px rgba(255,90,78,0.8),0 3px 10px rgba(0,0,0,0.55);}
+  .spell-btn.evil.targeting{border-color:#e05aff;box-shadow:0 0 14px rgba(224,90,255,0.85);}
   body.villain #btnWave,body.villain #btnAuto,body.villain #btnUndo,body.villain #btnBlitz,
   body.villain #stBuildWrap,body.villain #stPop{display:none!important;}
   #vdBar{display:flex;align-items:center;gap:8px;padding:4px 10px 0;}

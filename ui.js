@@ -202,7 +202,7 @@ function beginRun(mapId,cont,peak){
   else if(!cont||!loadGame(mapId))newGame(mapId);
   started=true;
   UIS.mode='none';UIS.selTower=null;UIS.selWall=null;
-  buildArmyCards();buildHeroCards();buildRelicCards();buildPremiumCards();refreshCards();
+  buildSpellBar();buildArmyCards();buildHeroCards();buildRelicCards();buildPremiumCards();refreshCards();
   hideTowerDetail();setCursorHint('');
   closeMobilePanel();
   SFXp('horn_wave');
@@ -217,7 +217,7 @@ function beginVillain(mapId,cont){
   if(!cont||!vLoadGame(mapId))newVillain(mapId);
   started=true;
   UIS.mode='none';UIS.buildType=null;UIS.selBarr=null;UIS.pendC=-1;UIS.pendR=-1;
-  buildVillainDock();
+  buildVillainDock();buildSideBars();buildSpellBar();updateSidebarsVisible();
   hideTowerDetail();setCursorHint('');closeMobilePanel();
   if(G.bossPending)showBossSelect();
   SFXp('horn_wave');
@@ -229,7 +229,7 @@ function refreshVillainHud(){
   const sp=$('spdCycle');if(sp){sp.textContent=G.speed+'×';sp.classList.toggle('active',G.speed>1);}
   for(const s of [1,2,3]){const b=$('spd'+s);if(b)b.classList.toggle('active',G.speed===s);}
   $('btnPause').textContent=G.paused?'▶':'⏸';
-  refreshVillainDock();
+  refreshVillainDock();refreshSpellBar();refreshSideBars();updateSidebarsVisible();
 }
 function buildVillainDock(){
   const box=$('vBarrCards');box.innerHTML='';
@@ -311,6 +311,7 @@ function villainTab(t){
   SFXp('ui_tab');
 }
 function villainCanvasClick(p,c,r){
+  if(G.targetMode&&G.targetMode.indexOf('vspell:')===0){vSpellAt(G.targetMode.slice(7),p.x,p.y);setCursorHint('');return;}
   if(UIS.mode==='vbuild'){
     if(UIS.justPlacedGhost){UIS.justPlacedGhost=false;return;}
     if(UIS.pendC===c&&UIS.pendR===r){
@@ -606,9 +607,31 @@ function syncBuildSelection(){
 }
 
 /* ================= letterbox side strips (phones) ================= */
+function villainIconInto(ic,def){
+  const cv=document.createElement('canvas');cv.width=34;cv.height=36;
+  const g=cv.getContext('2d');g.translate(17,22);
+  const e={def:{kind:def.kind,col:def.col,fly:def.fly,armor:def.armor},x:0,y:0,
+    size:Math.min(11,def.size),anim:1.2,rarity:def.tier==='legendary'?'champ':null,boss:false,slowP:0,flash:0,poison:[]};
+  try{drawEnemy(g,e);}catch(err){}
+  ic.innerHTML='';ic.appendChild(cv);
+}
 function buildSideBars(){
   const L=$('sideL');
   L.innerHTML='';
+  if(typeof G!=='undefined'&&G&&G.villain){
+    for(const def of VTROOPS){
+      const d=document.createElement('div');
+      d.className='side-card';d.dataset.vid=def.id;d.title=vName(def)+' — '+def.bcost+' DP';
+      const ic=document.createElement('div');ic.className='card-icon';ic.style.width='32px';ic.style.height='32px';
+      d.appendChild(ic);
+      const c=document.createElement('div');c.className='sc-cost';c.textContent=def.bcost;d.appendChild(c);
+      const lk=document.createElement('div');lk.className='sc-lock';lk.id='vsl-'+def.id;lk.textContent='🔒W'+def.unlock;d.appendChild(lk);
+      d.onclick=()=>villainSelectBuild(def);
+      L.appendChild(d);
+      villainIconInto(ic,def);
+    }
+    return;
+  }
   for(const def of TOWERS){
     const d=document.createElement('div');
     d.className='side-card';d.dataset.tid=def.id;d.title=def.name+' — '+def.cost+'g';
@@ -625,6 +648,7 @@ function buildSideBars(){
 }
 function refreshSideBars(){
   if(!G)return;
+  if(G.villain){refreshVillainSideBars();return;}
   document.querySelectorAll('#sideL .side-card').forEach(x=>{
     const def=TOWER_BY[x.dataset.tid];
     if(def)x.classList.toggle('cant',G.gold<def.cost);
@@ -669,8 +693,38 @@ function refreshSideBars(){
     x.classList.toggle('dead',!!(hh&&hh.dead));
   });
 }
+function refreshVillainSideBars(){
+  document.querySelectorAll('#sideL .side-card').forEach(x=>{
+    const def=VTROOP_BY[x.dataset.vid];if(!def)return;
+    const locked=def.unlock>G.wave;
+    x.classList.toggle('cant',locked||G.dp<def.bcost);
+    x.classList.toggle('selected',UIS.mode==='vbuild'&&UIS.buildType===def.id);
+    const lk=$('vsl-'+def.id);if(lk)lk.style.display=locked?'flex':'none';
+  });
+  const R=$('sideR');
+  const sig='v,'+(G.bossPending?'b':'');
+  if(R.dataset.sig!==sig){
+    R.dataset.sig=sig;R.innerHTML='';
+    for(const u of V_UPGR){
+      const b=document.createElement('div');
+      b.className='side-card mgmt';b.dataset.vup=u.id;b.title=u.name+' — '+u.desc;
+      b.innerHTML=u.ico+'<div class="sc-cost" id="vusr-'+u.id+'"></div>';
+      b.onclick=()=>{if(vBuyUpgrade(u.id)){refreshSideBars();if(typeof refreshVillainDock==='function')refreshVillainDock();}};
+      R.appendChild(b);
+    }
+    if(G.bossPending){
+      const bb=document.createElement('div');bb.className='side-card mgmt';bb.textContent='💀';bb.title='Choose a boss';
+      bb.onclick=()=>showBossSelect();R.appendChild(bb);
+    }
+  }
+  R.querySelectorAll('[data-vup]').forEach(x=>{
+    const id=x.dataset.vup;
+    x.classList.toggle('cant',G.dp<vUpCost(id));
+    const s=$('vusr-'+id);if(s)s.textContent='L'+(G.up[id]||0);
+  });
+}
 function updateSidebarsVisible(){
-  if(!started||!IS_TOUCH||(G&&G.villain)){document.body.classList.remove('sidebars','rail-open','spells-open');return;}
+  if(!started||!IS_TOUCH){document.body.classList.remove('sidebars','rail-open','spells-open');return;}
   const r=canvas.getBoundingClientRect();
   const scale=Math.min(r.width/CFG.W,r.height/CFG.H);
   const band=(r.width-CFG.W*scale)/2;
@@ -782,12 +836,16 @@ function positionTowerDetail(t){
 }
 
 /* ================= spell bar ================= */
+function curSpellList(){return (typeof G!=='undefined'&&G&&G.villain)?V_SPELLS:SPELLS;}
 function buildSpellBar(){
   const bar=$('spellbar');
   bar.innerHTML='';
-  for(const def of SPELLS){
+  const villain=(typeof G!=='undefined'&&G&&G.villain);
+  const list=curSpellList();
+  for(const def of list){
+    const ult=def.id==='ragnarok'||def.id==='apocalypse';
     const b=document.createElement('button');
-    b.className='spell-btn'+(def.id==='ragnarok'?' ult':'');
+    b.className='spell-btn'+(ult?' ult':'')+(villain?' evil':'');
     b.id='sp-'+def.id;
     b.title=def.name+' — '+def.desc;
     b.innerHTML='<div class="spell-ico" id="spi-'+def.id+'"></div>'+
@@ -795,6 +853,16 @@ function buildSpellBar(){
       '<div class="spell-cdtxt" id="spt-'+def.id+'"></div>';
     b.onclick=()=>{
       if(!G||G.over)return;
+      if(G.villain){
+        if(G.targetMode==='vspell:'+def.id){G.targetMode=null;setCursorHint('');return;}
+        if(vCastSpell(def.id)){
+          if(def.target)setCursorHint(IS_TOUCH?'Tap the defenses to curse them':'Click the defenses to curse them');
+        }else if((G.vspells[def.id]||0)>0){
+          setCursorHint(def.name+' recharges in '+Math.ceil(G.vspells[def.id])+'s');
+          setTimeout(()=>{if($('cursorHint').textContent.indexOf('recharges')>=0)setCursorHint('');},1500);
+        }
+        SFXp('ui_click');return;
+      }
       if(G.targetMode==='spell:'+def.id){G.targetMode=null;setCursorHint('');return;}
       if(castSpell(def.id)){
         if(def.target)setCursorHint(def.id==='blessing'
@@ -810,17 +878,21 @@ function buildSpellBar(){
     bar.appendChild(b);
   }
   setTimeout(()=>{
-    for(const def of SPELLS)iconHtmlInto($('spi-'+def.id),'misc',def.icon,IS_TOUCH?40:34,'✦');
+    for(const def of list)iconHtmlInto($('spi-'+def.id),'misc',def.icon,IS_TOUCH?40:34,'✦');
   },0);
 }
 function refreshSpellBar(){
   if(!G)return;
-  for(const def of SPELLS){
-    const cd=G.spells[def.id],ready=cd<=0;
+  const villain=G.villain;
+  const list=curSpellList();
+  const cds=villain?G.vspells:G.spells;
+  const pre=villain?'vspell:':'spell:';
+  for(const def of list){
+    const cd=cds[def.id],ready=cd<=0;
     const btn=$('sp-'+def.id);
     if(!btn)continue;
     btn.classList.toggle('ready',ready);
-    btn.classList.toggle('targeting',G.targetMode==='spell:'+def.id);
+    btn.classList.toggle('targeting',G.targetMode===pre+def.id);
     const pct=ready?0:clamp(cd/def.cd,0,1)*100;
     $('spc-'+def.id).style.height=pct+'%';
     $('spt-'+def.id).textContent=ready?'':(cd>=60?Math.ceil(cd/60)+'m':Math.ceil(cd)+'s');
