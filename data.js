@@ -177,19 +177,19 @@ const TOWER_BY={};TOWERS.forEach(t=>TOWER_BY[t.id]=t);
    Two legendary, two supreme, one divine. Never in the normal shop.
    ============================================================ */
 const PREM_TOWERS=[
- {id:'pHeal', name:'Grove Sanctuary', prem:'legendary', tierName:'Legendary', buildWaves:10, cost:1400,
+ {id:'pHeal', name:'Grove Sanctuary', prem:'legendary', tierName:'Legendary', buildWaves:10, cost:14000,
   rate:0, range:180, dtype:'none', proj:'none', snd:'holy_heal', heal:30, hue:'#54e0a0',
   desc:'A cleric-mage channels a constant healing aura over your troops and heroes. Scales with level.'},
- {id:'pStorm', name:'Wrath Spire', prem:'legendary', tierName:'Legendary', buildWaves:14, cost:1700,
+ {id:'pStorm', name:'Wrath Spire', prem:'legendary', tierName:'Legendary', buildWaves:14, cost:17000,
   rate:0, range:0, dtype:'magic', proj:'none', snd:'skill_meteor', hue:'#c060ff',
   desc:'A stormcaller-mage hurls random calamities — thunder, quake, flood or fire. Timing and power are pure chance.'},
- {id:'pGat', name:'Repeater Ballista', prem:'supreme', tierName:'Supreme', buildWaves:22, cost:3200,
+ {id:'pGat', name:'Repeater Ballista', prem:'supreme', tierName:'Supreme', buildWaves:22, cost:32000,
   dmg:30, rate:8, range:220, dtype:'phys', proj:'arrow', pierce:1, snd:'arrow', targets:'both', hue:'#ff5a3a',
   desc:'A medieval machine-gun: a blur of bolts that shreds packs and melts bosses. Scales hard with level.'},
- {id:'pShadow', name:'Umbral Chain', prem:'supreme', tierName:'Supreme', buildWaves:28, cost:3800,
+ {id:'pShadow', name:'Umbral Chain', prem:'supreme', tierName:'Supreme', buildWaves:28, cost:38000,
   dmg:70, rate:0.8, range:260, dtype:'magic', proj:'none', snd:'zap', targets:'both', hue:'#8a3adf',
   desc:'Tendrils of darkness leap between EVERY enemy on the field at once. Scales with level.'},
- {id:'pGod', name:'Aeon Monolith', prem:'divine', tierName:'Divine', buildWaves:35, cost:7500,
+ {id:'pGod', name:'Aeon Monolith', prem:'divine', tierName:'Divine', buildWaves:35, cost:750000,
   rate:0, range:320, dtype:'magic', proj:'none', snd:'boss_die', hue:'#ffd75e',
   desc:'The tower of ten fates. Every wave it becomes something new at random — the effect, the timing and the power are never the same twice.'},
 ];

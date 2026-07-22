@@ -306,6 +306,33 @@ function maintainArmy(dt){
 
 /* ================= BULK UPGRADES ================= */
 function upgradeTowerMax(t){let n=0;while(t.lvl<CFG.MAX_TOWER_LVL&&upgradeTower(t))n++;return n;}
+/* auto-fill the frontier with Gold Mints, one perimeter ring per call.
+   finishes the current (outermost open) ring before starting the next. */
+function autoBuildMines(){
+  if(!G||G.over)return 0;
+  const def=TOWER_BY.mint;
+  const maxRing=Math.floor(Math.min(CFG.COLS,CFG.ROWS)/2);
+  for(let ring=0;ring<maxRing;ring++){
+    const tiles=[];
+    for(let r=0;r<CFG.ROWS;r++)for(let c=0;c<CFG.COLS;c++){
+      if(Math.min(c,r,CFG.COLS-1-c,CFG.ROWS-1-r)!==ring)continue;
+      if(canPlace(c,r))tiles.push([c,r]);
+    }
+    if(!tiles.length)continue; // ring already full / unbuildable — go inward
+    if(G.gold<def.cost){setBanner('Not enough gold for more mines ('+fmt(def.cost)+'g each)');return 0;}
+    let placed=0;
+    for(const t of tiles){
+      if(G.gold<def.cost)break;
+      if(placeTower('mint',t[0],t[1]))placed++;
+    }
+    setBanner('💰 Auto-built '+placed+' Gold Mint'+(placed===1?'':'s')+' on the frontier — tap again for the next ring');
+    SFXp('build');
+    if(typeof onWaveEnd==='function')onWaveEnd();
+    return placed;
+  }
+  setBanner('The whole frontier is mined out!');
+  return 0;
+}
 function promoteTower(t){
   const def=TOWER_BY[t.id];
   if(t.lvl<CFG.MAX_TOWER_LVL||(t.tier||1)>=3)return false;

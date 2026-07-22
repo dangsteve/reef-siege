@@ -425,6 +425,8 @@ function bindHud(){
   const rt=$('railTog'),spt=$('spellTog');
   if(rt)rt.onclick=()=>{const b=document.body;b.classList.remove('spells-open');b.classList.toggle('rail-open');SFXp('ui_click');};
   if(spt)spt.onclick=()=>{const b=document.body;b.classList.remove('rail-open');b.classList.toggle('spells-open');SFXp('ui_click');};
+  const mn=$('btnMines');
+  if(mn)mn.onclick=()=>{if(G&&!G.over&&!G.villain){autoBuildMines();refreshCards();}};
   const bz=$('btnBlitz');
   if(bz)bz.onclick=()=>{
     if(!G||G.over)return;
@@ -566,6 +568,7 @@ function buildPremiumCards(){
     d.onclick=()=>{
       if(!G)return;
       if(G.builders<1){setBanner('You need a free 🔨 Master Builder to raise a Premium Tower.');SFXp('ui_click');return;}
+      if(G.gold<def.cost){setBanner('Need '+fmt(def.cost)+'g to raise the '+def.name+' (premium!)');SFXp('ui_click');return;}
       selectBuildType(def);
     };
     box.appendChild(d);
@@ -784,13 +787,15 @@ function showTowerDetail(t){
     '<div class="td-stats">'+stats+'</div>'+
     '<div class="btn-row">'+
     (maxed?'':'<button class="small-btn gold" id="btnUp">⬆ '+fmt(upCost)+'g</button>'+
-      '<button class="small-btn gold" id="btnUpMax" title="Buy every affordable upgrade level at once">⏫ Max</button>')+
+      '<button class="small-btn gold" id="btnUpMax" title="Max THIS tower">⏫ Max</button>'+
+      '<button class="small-btn gold" id="btnUpAll" title="Upgrade EVERY tower & wall to max, cheapest first, until gold runs out">⏫ All</button>')+
     (maxed&&(t.tier||1)<3?'<button class="small-btn gold" id="btnPromo" title="Permanent tier promotion: +40% damage and +8% range per tier">'+((t.tier||1)===1?'⟡ Silver ':'★ Gold ')+fmt(towerPromoCost(def,t.tier||1))+'g</button>':'')+
     '<button class="small-btn danger" id="btnSell">Sell +'+fmt(Math.round(towerInvested(def,t.lvl)*0.7))+'g</button>'+
     '</div>';
   box.style.display='block';
   if(!maxed)$('btnUp').onclick=()=>{if(upgradeTower(t)){showTowerDetail(t);positionTowerDetail(t);}};
   if(!maxed)$('btnUpMax').onclick=()=>{if(upgradeTowerMax(t)>0){showTowerDetail(t);positionTowerDetail(t);refreshCards();}};
+  if(!maxed){const ba=$('btnUpAll');if(ba)ba.onclick=()=>{bulkUpgrade('towers');if(G.towers.includes(t))showTowerDetail(t);else{hideTowerDetail();UIS.selTower=null;}refreshCards();};}
   const pb2=$('btnPromo');
   if(pb2)pb2.onclick=()=>{if(promoteTower(t)){showTowerDetail(t);positionTowerDetail(t);refreshCards();}};
   $('btnSell').onclick=()=>{sellTower(t);hideTowerDetail();UIS.selTower=null;};
@@ -807,11 +812,13 @@ function showWallDetail(w){
     '<div class="td-stats"><span>🛡 '+fmt(Math.round(w.hp))+' / '+fmt(w.maxHp)+'</span><span>blocks its road while it stands</span></div>'+
     '<div class="btn-row">'+
     '<button class="small-btn gold" id="btnWUp">⬆ Reinforce '+fmt(upC)+'g</button>'+
+    '<button class="small-btn gold" id="btnWAll" title="Upgrade EVERY tower & wall to max, cheapest first, until gold runs out">⏫ All</button>'+
     (w.hp<w.maxHp?'<button class="small-btn" id="btnWRep">🔧 Repair '+fmt(repC)+'g</button>':'')+
     '<button class="small-btn danger" id="btnWSell">Sell +'+fmt(Math.round(TOWER_BY.wall.cost*0.5))+'g</button>'+
     '</div>';
   box.style.display='block';
   $('btnWUp').onclick=()=>{if(upgradeWall(w)){showWallDetail(w);positionTowerDetail(w);}};
+  {const ba=$('btnWAll');if(ba)ba.onclick=()=>{bulkUpgrade('towers');if(G.walls.includes(w))showWallDetail(w);else{hideTowerDetail();UIS.selWall=null;}refreshCards();};}
   const rp=$('btnWRep');
   if(rp)rp.onclick=()=>{if(repairWall(w)){showWallDetail(w);positionTowerDetail(w);}};
   $('btnWSell').onclick=()=>{sellWall(w);hideTowerDetail();UIS.selWall=null;};
@@ -1377,7 +1384,13 @@ function bindCanvas(){
           setCursorHint('');
           if(G.gold<TOWER_BY[UIS.buildType].cost)cancelMode();
         }else{
-          setCursorHint(UIS.buildType==='wall'?'Walls go ON a road — clear of the gate, spawn and other walls':'Blocked tile — pick an open one');
+          const bd=TOWER_BY[UIS.buildType];
+          let msg;
+          if(bd&&bd.prem&&G.builders<1)msg='Need a free 🔨 Master Builder';
+          else if(bd&&G.gold<bd.cost)msg='Need '+fmt(bd.cost)+'g'+(bd.prem?' — premium tower!':'');
+          else if(UIS.buildType==='wall')msg='Walls go ON a road — clear of the gate, spawn and other walls';
+          else msg='Blocked tile — pick an open one';
+          setCursorHint(msg);
         }
       }else{
         setPending(c,r);

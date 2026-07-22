@@ -179,14 +179,14 @@
   body.sidebars #sideL{bottom:8px;}
   body.sidebars #sideR{bottom:56px;}
   /* floating dropdown toggles (phones only) */
-  .rail-tog{display:none;position:absolute;z-index:9;
-    right:calc(6px + env(safe-area-inset-right,0px));
-    width:46px;height:42px;border-radius:11px;font-size:16px;font-weight:bold;line-height:1;
+  .rail-tog{display:none;position:absolute;z-index:11;
+    width:48px;height:40px;border-radius:11px;font-size:15px;font-weight:bold;line-height:1;
     background:linear-gradient(180deg,#453c68,#332b50);color:#ffd75e;border:1px solid #5d5288;
-    align-items:center;justify-content:center;gap:1px;box-shadow:0 2px 7px rgba(0,0,0,0.55);}
+    align-items:center;justify-content:center;gap:2px;box-shadow:0 2px 8px rgba(0,0,0,0.6);}
   .rail-tog .tog-caret{font-size:9px;opacity:0.85;}
-  body.sidebars #railTog{display:flex;bottom:calc(100px + env(safe-area-inset-bottom,0px));}
-  body.sidebars #spellTog{display:flex;bottom:calc(50px + env(safe-area-inset-bottom,0px));}
+  /* toggles live at the bottom-centre — clear of BOTH side rails and the spell column */
+  body.sidebars #railTog{display:flex;left:calc(50% - 52px);bottom:calc(6px + env(safe-area-inset-bottom,0px));}
+  body.sidebars #spellTog{display:flex;left:calc(50% + 4px);bottom:calc(6px + env(safe-area-inset-bottom,0px));}
   body.sidebars.rail-open #railTog{background:linear-gradient(180deg,#8a63d8,#6a48b0);color:#fff;}
   body.sidebars.rail-open #railTog .tog-caret{transform:rotate(90deg);display:inline-block;}
   body.sidebars.spells-open #spellTog{background:linear-gradient(180deg,#8a63d8,#6a48b0);color:#fff;}
@@ -327,6 +327,7 @@
     border-top:1px solid #7a2a6a;box-shadow:0 -2px 10px rgba(0,0,0,0.55);z-index:5;}
   body.villain #villainDock{display:flex;}
   body.villain #dock{display:none!important;}
+  body.villain #btnMines{display:none!important;}
   body.villain.sidebars #villainDock{display:none!important;}
   .side-card{position:relative;}
   .sc-lock{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
@@ -436,6 +437,7 @@
     <button class="hud-btn" id="btnPause" title="Pause (Space)">⏸</button>
     <button class="hud-btn" id="btnUndo" title="Undo last build / upgrade (full refund)">↩</button>
     <button class="hud-btn" id="btnBlitz" title="Blitz — auto-fight the next 10 waves at hyper speed (tap again to cancel)">⏩</button>
+    <button class="hud-btn" id="btnMines" title="Auto-build Gold Mints along the map edge — tap again to fill the next ring">💰</button>
     <button class="hud-btn" id="btnSfx" title="Sound effects">🔊</button>
     <button class="hud-btn" id="btnMusic" title="Music">🎵</button>
     <button class="hud-btn" id="btnHelp" title="How to play">?</button>
